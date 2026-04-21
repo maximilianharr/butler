@@ -1,3 +1,12 @@
 {
-    "darkmode":  "true"
+    "plugins":[
+        {"calendar": true},
+        {"diary": true},
+        {"dossier": true},
+        {"files": true},
+        {"flipcard": true},
+        {"inbox": true},
+        {"pdf": true},
+        {"zettelkasten": true}
+    ]
 }

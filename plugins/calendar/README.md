@@ -1,1 +1,6 @@
-has kanban view
+---
+name: "calendar"
+content: true
+---
+
+The 

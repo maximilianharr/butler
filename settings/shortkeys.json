@@ -3,6 +3,6 @@
     "search-file":  "ctrl+f",
     "plugins":[
         {"calendar": "ctrl+shift+c"},
-        {"todo": "ctrl+shift+t"}
+        {"zettelkasten": "ctrl+shift+z"}
     ]
 }
