@@ -1,0 +1,8 @@
+{
+    "search-all":  "ctrl+shift+f",
+    "search-file":  "ctrl+f",
+    "plugins":[
+        {"calendar": "ctrl+shift+c"},
+        {"todo": "ctrl+shift+t"}
+    ]
+}
