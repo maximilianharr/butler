@@ -5,7 +5,7 @@ The frontend window provides the main window frame for the butler app. There is 
 - search
 - files
 - sync
-- plugins
+- other plugins
 - settings
 
 By default the last icon is selected which was open when closing the app. 
