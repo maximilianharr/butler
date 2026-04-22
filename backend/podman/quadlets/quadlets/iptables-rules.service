@@ -1,0 +1,22 @@
+[Unit]
+Description=NAT port forward 443 → 8443 for rootless Podman nginx
+# Must run after the network is up but before podman starts pulling containers.
+After=network.target
+Before=dashboard-pod.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# -C checks if the rule already exists (exit 0) — only add if missing.
+# This makes the service idempotent: safe to run on every boot and re-deploy.
+ExecStart=/bin/bash -c '\
+    iptables  -t nat -C PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443 2>/dev/null \
+    || iptables  -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443; \
+    ip6tables -t nat -C PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443 2>/dev/null \
+    || ip6tables -t nat -A PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443'
+ExecStop=/bin/bash -c '\
+    iptables  -t nat -D PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443 2>/dev/null || true; \
+    ip6tables -t nat -D PREROUTING -p tcp --dport 443 -j REDIRECT --to-port 8443 2>/dev/null || true'
+
+[Install]
+WantedBy=multi-user.target

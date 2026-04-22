@@ -1,0 +1,11 @@
+[Unit]
+Description=Update butler every 3 h
+Requires=butler-update.service
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=3h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,3 +1,3 @@
 # Backend
 
-The backend provides the base functionality, api endpoints and tooling.
+The backend provides the base functionality, api endpoints, tooling, logging and dashboarding. 

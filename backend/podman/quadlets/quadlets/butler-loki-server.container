@@ -1,0 +1,26 @@
+[Unit]
+Description=butler Loki Server (Log Aggregation)
+After=network-online.target
+
+[Container]
+Image=localhost/butler/loki:latest
+ContainerName=butler-loki-server
+
+# Pod — shares network namespace with all other butler containers.
+# Loki is reachable at localhost:3100 from any container in the pod.
+Pod=butler.pod
+
+# Persistent volume for log chunks, index, and compactor state
+Volume=loki.volume:/loki
+
+# Mount the Loki config from the repo checkout
+Volume=%h/butler/server/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+
+# Pull newer image if available (external Docker Hub image)
+PodmanArgs=--pull=newer
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,19 @@
+# =============================================================================
+# Grafana Dashboard Provisioning
+# =============================================================================
+# Auto-loads dashboard JSON files from the json/ sub-directory on startup.
+# The JSON files live in a dedicated sub-folder so Grafana's dashboard file
+# loader never tries to parse this YAML provisioner config as a dashboard.
+
+apiVersion: 1
+
+providers:
+  - name: "Butler Monitoring"
+    orgId: 1
+    folder: "Butler Monitoring"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards/json
+      foldersFromFilesStructure: false

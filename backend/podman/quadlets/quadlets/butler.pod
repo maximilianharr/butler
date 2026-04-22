@@ -1,0 +1,19 @@
+[Unit]
+Description=Butler Pod
+
+[Pod]
+PodName=butler
+
+# Ports
+PodmanArgs=--add-host=host.containers.internal:host-gateway
+PublishPort=8443:443
+PublishPort=8000:8000
+PublishPort=5432:5432
+PublishPort=8081:8081
+# Grafana direct access (optional — also available via nginx at /grafana/)
+PublishPort=3000:3000
+# Prometheus direct access (optional — used by Grafana internally via localhost:9090)
+PublishPort=9090:9090
+
+[Install]
+WantedBy=default.target

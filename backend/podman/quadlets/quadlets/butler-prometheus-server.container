@@ -1,0 +1,20 @@
+[Unit]
+Description=butler Prometheus Server (Metrics Collection)
+After=network-online.target
+
+[Container]
+Image=localhost/butler/prometheus:latest
+ContainerName=butler-prometheus-server
+
+Pod=buter.pod
+
+Volume=prometheus.volume:/prometheus
+Volume=%h/butler/server/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+PodmanArgs=--pull=never
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=default.target

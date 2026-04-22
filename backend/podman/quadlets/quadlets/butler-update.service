@@ -1,0 +1,12 @@
+[Unit]
+Description=Update butler
+Wants=butler-update.timer
+
+[Service]
+Type=oneshot
+ExecStart=podman exec butler-warehouse-server /usr/src/app/server/quadlets/butler-update.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

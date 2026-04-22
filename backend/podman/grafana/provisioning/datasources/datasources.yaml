@@ -1,0 +1,37 @@
+# =============================================================================
+# Grafana Datasource Provisioning — Loki + Prometheus
+# =============================================================================
+# Auto-configures datasources on Grafana startup.
+# Loki and Prometheus are reachable at localhost because all containers share
+# the same network namespace inside the dashboard pod.
+#
+# Reference: https://grafana.com/docs/grafana/latest/administration/provisioning/
+
+apiVersion: 1
+
+# Remove any datasources that were previously provisioned without an explicit uid.
+# Grafana auto-generates a uid when uid is omitted; later adding uid: loki /
+# uid: prometheus causes a fatal "data source not found" crash on startup.
+# This block deletes them by name so they are re-created cleanly below.
+deleteDatasources:
+  - name: Loki
+    orgId: 1
+  - name: Prometheus
+    orgId: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy                         # Grafana backend proxies requests to Loki
+    url: http://localhost:3100            # Same pod = shared network namespace
+    uid: loki
+    isDefault: true
+    editable: false                       # Prevent manual changes in the UI
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://localhost:9090            # Same pod = shared network namespace
+    uid: prometheus
+    isDefault: false
+    editable: false
