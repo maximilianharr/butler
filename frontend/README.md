@@ -9,3 +9,4 @@ The frontend window provides the main window frame for the butler app. There is 
 - settings
 
 By default the last icon is selected which was open when closing the app. 
+On the right pane, the main window, is where the plugin is located

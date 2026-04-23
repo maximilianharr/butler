@@ -1,0 +1,3 @@
+# PDF
+
+The user can either just copy pdfs to the sample folder and they are then processed or upload them via an upload botton. In the default view the last pdf protocols are show using thumbnails in a grid. If the user clicks on a pdf then the pdf is opened and the respective markdown file with equal filename but .md extension. The pdf is show on the left and the markdown on the right. On the top right corner is a '+' widget to upload a new pdf. If a new pdf is uploaded then the OCR is run in the background to derive the letters from the PDF.

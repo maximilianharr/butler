@@ -1,4 +1,5 @@
 {
+    "focus-mode": "ctrl J",
     "search-all":  "ctrl shift f",
     "search-file":  "ctrl f",
     "zoom-in": "ctrl +",

@@ -1,0 +1,3 @@
+# Dossier
+
+Dossier is are person related notes. The UI is separated in two divs. On the left is a list of persons 'first name' + 'last name'. Each person is a new row which the user can scroll. When a new letter start it is separated with a small line. If no user exists with the respective new letter then no line is show. All alphabetic letters are shown on the side vertically. If the user clicks on a letter then it jumps to the letter. When the user clicks on a name then the respective markdown is opened and the user can edit it.

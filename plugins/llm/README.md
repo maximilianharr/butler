@@ -1,0 +1,3 @@
+# LLM
+
+The LLM plugin opens a chat window where the user can insert questions about the markdown files which the LLM resolves using an LLM running locally. After the LLM answered in the chat, the user can type in another message. Next to the message window of the user is a '>' send icon and a 'o' record icon where the user can chat with the LLM via voice instead of writing. In the background a voice model is then selected.
