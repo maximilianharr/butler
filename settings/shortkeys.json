@@ -1,8 +1,11 @@
 {
-    "search-all":  "ctrl+shift+f",
-    "search-file":  "ctrl+f",
+    "search-all":  "ctrl shift f",
+    "search-file":  "ctrl f",
+    "zoom-in": "ctrl +",
+    "zoom-out": "ctrl -",
+    "folder-view": "ctrl b",
     "plugins":[
-        {"calendar": "ctrl+shift+c"},
-        {"zettelkasten": "ctrl+shift+z"}
+        {"calendar": "ctrl shift c"},
+        {"zettelkasten": "ctrl shift z"}
     ]
 }
