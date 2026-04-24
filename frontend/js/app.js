@@ -44,10 +44,12 @@ function toast(message, type = 'info') {
 // ─── State ──────────────────────────────────────────────────
 
 const state = {
-  activePlugin: null,     // current sidebar plugin name
-  currentFile: null,      // path of file open in editor
+  activePlugin: null,
+  currentFile: null,
   sidePanelVisible: false,
   theme: 'dark',
+  openTabs: [],    // [{path, name}]
+  activeTab: null,  // path of active tab
 };
 
 // ─── DOM References ─────────────────────────────────────────
@@ -60,8 +62,9 @@ const $spContent = document.getElementById('sp-content');
 const $spClose = document.getElementById('sp-close');
 const $resizeHandle = document.getElementById('resize-handle');
 const $mainContent = document.getElementById('main-content');
-const $breadcrumb = document.getElementById('breadcrumb');
+const $tabBar = document.getElementById('tab-bar');
 const $mainActions = document.getElementById('main-actions');
+const $tabContextMenu = document.getElementById('tab-context-menu');
 
 // ─── Plugin System ──────────────────────────────────────────
 
@@ -71,7 +74,7 @@ const $mainActions = document.getElementById('main-actions');
  *   'full'   — takes over the main area entirely
  */
 const plugins = {};
-const pluginOrder = { top: ['search', 'files'], bottom: ['sync', 'settings'] };
+const pluginOrder = { top: ['search', 'files', 'calendar'], bottom: ['sync', 'settings'] };
 
 async function registerPlugin(name, modulePath) {
   try {
@@ -117,6 +120,9 @@ function togglePlugin(name) {
     return;
   }
 
+  // Track whether we're leaving a full-type plugin
+  const wasFullPlugin = state.activePlugin && plugins[state.activePlugin]?.type === 'full';
+
   // Deactivate previous
   if (state.activePlugin && plugins[state.activePlugin]?.deactivate) {
     plugins[state.activePlugin].deactivate();
@@ -127,14 +133,21 @@ function togglePlugin(name) {
 
   if (plugin.type === 'panel') {
     openSidePanel(name, plugin);
-    // Restore editor if a file is open
-    if (state.currentFile && plugins.editor) {
-      plugins.editor.openFile(state.currentFile);
+    // Restore main area if coming from a full plugin
+    if (wasFullPlugin) {
+      if (state.activeTab && plugins.editor) {
+        $mainContent.innerHTML = '';
+        plugins.editor.openFile(state.activeTab, $mainContent, butler);
+        renderTabBar();
+      } else {
+        showWelcome();
+        renderTabBar();
+      }
     }
   } else {
     closeSidePanel();
     $mainContent.innerHTML = '';
-    $breadcrumb.innerHTML = `<span class="crumb">${plugin.label || name}</span>`;
+    if ($tabBar) $tabBar.innerHTML = `<span class="tab-header-label">${plugin.label || name}</span>`;
     $mainActions.innerHTML = '';
     plugin.init($mainContent, butler);
   }
@@ -198,12 +211,16 @@ document.addEventListener('mouseup', () => {
   document.body.style.userSelect = '';
 });
 
-// ─── Theme ──────────────────────────────────────────────────
+// ─── Theme & Zoom ───────────────────────────────────────────
 
 async function initTheme() {
   try {
     const { data } = await API.get('/api/settings/appearance');
-    state.theme = data.darkmode === 'true' ? 'dark' : 'bright';
+    // Support legacy 'darkmode' field and new 'theme' field
+    state.theme = data.theme || (data.darkmode === 'true' ? 'dark' : data.darkmode === 'false' ? 'bright' : 'dark');
+    // Apply zoom level → font size (clamp 50–200%)
+    const zoom = Math.max(50, Math.min(200, parseInt(data['zoom-level']) || 100));
+    document.documentElement.style.setProperty('--fs-base', `${14 * zoom / 100}px`);
   } catch { /* keep default */ }
   document.documentElement.setAttribute('data-theme', state.theme);
 }
@@ -211,7 +228,6 @@ async function initTheme() {
 function toggleTheme() {
   state.theme = state.theme === 'dark' ? 'bright' : 'dark';
   document.documentElement.setAttribute('data-theme', state.theme);
-  API.put('/api/settings/appearance', { data: { darkmode: state.theme === 'dark' ? 'true' : 'false' } }).catch(() => {});
 }
 
 // ─── Side Panel Close ───────────────────────────────────────
@@ -248,22 +264,27 @@ const butler = {
   openFile(path) {
     state.currentFile = path;
     if (!plugins.editor) { toast('Editor not loaded', 'error'); return; }
+
+    // Deactivate full-type plugin if active
+    if (state.activePlugin && plugins[state.activePlugin]?.type === 'full') {
+      if (plugins[state.activePlugin]?.deactivate) plugins[state.activePlugin].deactivate();
+      state.activePlugin = null;
+      updateActiveIcon();
+    }
+
+    // Add tab if not already open
+    if (!state.openTabs.find(t => t.path === path)) {
+      state.openTabs.push({ path, name: path.split('/').pop() });
+    }
+    state.activeTab = path;
+
     $mainContent.innerHTML = '';
-    // Build breadcrumb safely with textContent (no XSS via filenames)
-    $breadcrumb.innerHTML = '';
-    path.split('/').forEach((seg, i, arr) => {
-      if (i > 0) {
-        const sep = document.createElement('span');
-        sep.className = 'sep';
-        sep.textContent = '/';
-        $breadcrumb.appendChild(sep);
-      }
-      const crumb = document.createElement('span');
-      crumb.className = 'crumb';
-      crumb.textContent = seg;
-      $breadcrumb.appendChild(crumb);
-    });
     plugins.editor.openFile(path, $mainContent, butler);
+    renderTabBar();
+  },
+
+  onTabDirtyChange(_path, _dirty) {
+    renderTabBar();
   },
 
   toggleTheme,
@@ -272,6 +293,172 @@ const butler = {
     if (plugins.files?.refresh) plugins.files.refresh();
   },
 };
+
+// ─── Tab Bar ────────────────────────────────────────────────
+
+function renderTabBar() {
+  if (!$tabBar) return;
+  $tabBar.innerHTML = '';
+
+  for (const tab of state.openTabs) {
+    const el = document.createElement('div');
+    el.className = 'tab' + (tab.path === state.activeTab ? ' active' : '');
+    el.dataset.path = tab.path;
+
+    const name = document.createElement('span');
+    name.className = 'tab-name';
+    name.textContent = tab.name;
+    el.appendChild(name);
+
+    if (plugins.editor?.isDirty(tab.path)) {
+      const dot = document.createElement('span');
+      dot.className = 'tab-dirty';
+      dot.textContent = '●';
+      el.appendChild(dot);
+    }
+
+    const close = document.createElement('button');
+    close.className = 'tab-close';
+    close.textContent = '×';
+    close.addEventListener('click', (e) => { e.stopPropagation(); closeTabByPath(tab.path); });
+    el.appendChild(close);
+
+    el.addEventListener('click', () => switchTab(tab.path));
+    el.addEventListener('contextmenu', (e) => { e.preventDefault(); showTabContextMenu(e, tab.path); });
+
+    $tabBar.appendChild(el);
+  }
+}
+
+function switchTab(path) {
+  if (state.activeTab === path) return;
+  state.activeTab = path;
+  state.currentFile = path;
+
+  // Deactivate full-type plugin if active
+  if (state.activePlugin && plugins[state.activePlugin]?.type === 'full') {
+    if (plugins[state.activePlugin]?.deactivate) plugins[state.activePlugin].deactivate();
+    state.activePlugin = null;
+    updateActiveIcon();
+  }
+
+  $mainContent.innerHTML = '';
+  if (plugins.editor) plugins.editor.openFile(path, $mainContent, butler);
+  renderTabBar();
+}
+
+function closeTabByPath(path) {
+  // Confirm if dirty
+  if (plugins.editor?.isDirty(path)) {
+    if (!confirm(`"${path.split('/').pop()}" has unsaved changes. Close anyway?`)) return;
+  }
+
+  const idx = state.openTabs.findIndex(t => t.path === path);
+  if (idx === -1) return;
+
+  state.openTabs.splice(idx, 1);
+  if (plugins.editor) plugins.editor.closeTab(path);
+
+  if (state.activeTab === path) {
+    if (state.openTabs.length > 0) {
+      const newIdx = Math.min(idx, state.openTabs.length - 1);
+      switchTab(state.openTabs[newIdx].path);
+    } else {
+      state.activeTab = null;
+      state.currentFile = null;
+      showWelcome();
+      renderTabBar();
+    }
+  } else {
+    renderTabBar();
+  }
+}
+
+function showWelcome() {
+  $mainContent.innerHTML = `
+    <div id="welcome">
+      <div class="welcome-icon">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 6h36v36H6z"/>
+          <path d="M14 16h20M14 24h16M14 32h12"/>
+        </svg>
+      </div>
+      <h1>Butler</h1>
+      <p>Your life in markdown.</p>
+      <div class="welcome-shortcuts">
+        <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> Search &nbsp;
+        <kbd>Ctrl</kbd>+<kbd>B</kbd> Files &nbsp;
+      </div>
+    </div>`;
+}
+
+// ─── Tab Context Menu ───────────────────────────────────────
+
+let contextMenuPath = null;
+
+function showTabContextMenu(e, path) {
+  contextMenuPath = path;
+  const menu = $tabContextMenu;
+  if (!menu) return;
+
+  // Position and clamp to viewport
+  let x = e.clientX, y = e.clientY;
+  menu.classList.add('visible');
+  const rect = menu.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 4;
+  if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+}
+
+document.addEventListener('click', () => $tabContextMenu?.classList.remove('visible'));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $tabContextMenu?.classList.remove('visible'); });
+
+$tabContextMenu?.addEventListener('click', (e) => {
+  const action = e.target.dataset.action;
+  if (!action || !contextMenuPath) return;
+  $tabContextMenu.classList.remove('visible');
+
+  switch (action) {
+    case 'close':
+      closeTabByPath(contextMenuPath);
+      break;
+    case 'close-others': {
+      const dirtyOthers = state.openTabs.filter(t => t.path !== contextMenuPath && plugins.editor?.isDirty(t.path));
+      if (dirtyOthers.length > 0 && !confirm(`${dirtyOthers.length} file(s) have unsaved changes. Close anyway?`)) break;
+      const keep = state.openTabs.find(t => t.path === contextMenuPath);
+      for (const tab of state.openTabs) {
+        if (tab.path !== contextMenuPath && plugins.editor) plugins.editor.closeTab(tab.path);
+      }
+      state.openTabs = keep ? [keep] : [];
+      if (contextMenuPath !== state.activeTab && keep) switchTab(contextMenuPath);
+      renderTabBar();
+      break;
+    }
+    case 'close-all': {
+      const dirtyTabs = state.openTabs.filter(t => plugins.editor?.isDirty(t.path));
+      if (dirtyTabs.length > 0 && !confirm(`${dirtyTabs.length} file(s) have unsaved changes. Close all anyway?`)) break;
+      for (const tab of state.openTabs) { if (plugins.editor) plugins.editor.closeTab(tab.path); }
+      state.openTabs = [];
+      state.activeTab = null;
+      state.currentFile = null;
+      showWelcome();
+      renderTabBar();
+      break;
+    }
+    case 'open-location':
+      if (state.activePlugin !== 'files') togglePlugin('files');
+      if (plugins.files?.revealFile) plugins.files.revealFile(contextMenuPath);
+      break;
+  }
+});
+
+// ─── Dirty-state page unload guard ──────────────────────────
+
+window.addEventListener('beforeunload', (e) => {
+  const hasDirty = state.openTabs.some(t => plugins.editor?.isDirty(t.path));
+  if (hasDirty) { e.preventDefault(); e.returnValue = ''; }
+});
 
 // ─── Boot ───────────────────────────────────────────────────
 
@@ -282,6 +469,7 @@ const butler = {
   await Promise.all([
     registerPlugin('search', '/js/plugins/search.js'),
     registerPlugin('files', '/js/plugins/files.js'),
+    registerPlugin('calendar', '/js/plugins/calendar.js'),
     registerPlugin('sync', '/js/plugins/sync.js'),
     registerPlugin('settings', '/js/plugins/settings.js'),
     registerPlugin('editor', '/js/plugins/editor.js'),

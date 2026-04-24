@@ -215,6 +215,41 @@ async def rename_file(body: RenameBody):
     return {"ok": True, "old_path": body.old_path, "new_path": body.new_path}
 
 
+class DuplicateBody(BaseModel):
+    path: str
+
+
+@router.post("/duplicate")
+async def duplicate_file(body: DuplicateBody):
+    """Duplicate a file or directory, appending '-copy' to the name."""
+    src = _safe_path(body.path)
+    if not src.exists():
+        raise HTTPException(404, "Source not found")
+    name = src.stem
+    suffix = src.suffix
+    dst = src.parent / f"{name}-copy{suffix}"
+    counter = 2
+    while dst.exists():
+        dst = src.parent / f"{name}-copy-{counter}{suffix}"
+        counter += 1
+    async with _write_lock:
+        if src.is_dir():
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+    return {"ok": True, "new_path": dst.relative_to(_workspace()).as_posix()}
+
+
+@router.get("/raw")
+async def raw_file(path: str = Query(...)):
+    """Serve a raw file from the workspace (images, PDFs, etc.)."""
+    from fastapi.responses import FileResponse
+    target = _safe_path(path)
+    if not target.exists() or not target.is_file():
+        raise HTTPException(404, "File not found")
+    return FileResponse(target)
+
+
 @router.post("/upload-image")
 async def upload_image(
     plugin: str = Query(..., description="Plugin folder name for storing the image"),

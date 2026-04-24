@@ -3,11 +3,129 @@
  *
  * Shows the workspace file tree in the side panel.
  * Clicking a file opens it in the editor.
+ * Right-click context menu: rename, delete, duplicate.
  */
 
 let $container = null;
 let butlerRef = null;
 let expandedPaths = new Set();
+let loadSeq = 0;
+
+// ─── Context Menu ───────────────────────────────────────────
+
+let $ctxMenu = null;
+let ctxNode = null;
+
+function ensureContextMenu() {
+  if ($ctxMenu) return;
+  $ctxMenu = document.createElement('div');
+  $ctxMenu.className = 'context-menu';
+  $ctxMenu.innerHTML = `
+    <button data-action="rename">Rename</button>
+    <button data-action="duplicate">Duplicate</button>
+    <button data-action="delete">Delete</button>
+  `;
+  document.body.appendChild($ctxMenu);
+
+  $ctxMenu.addEventListener('click', (e) => {
+    const action = e.target.dataset.action;
+    if (!action || !ctxNode) return;
+    $ctxMenu.classList.remove('visible');
+    handleCtxAction(action, ctxNode);
+  });
+
+  document.addEventListener('click', () => $ctxMenu?.classList.remove('visible'));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $ctxMenu?.classList.remove('visible'); });
+}
+
+function showFileContextMenu(e, node) {
+  e.preventDefault();
+  e.stopPropagation();
+  ensureContextMenu();
+  ctxNode = node;
+  let x = e.clientX, y = e.clientY;
+  $ctxMenu.classList.add('visible');
+  const rect = $ctxMenu.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 4;
+  if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
+  $ctxMenu.style.left = x + 'px';
+  $ctxMenu.style.top = y + 'px';
+}
+
+async function handleCtxAction(action, node) {
+  switch (action) {
+    case 'rename': startRename(node); break;
+    case 'delete': await doDelete(node); break;
+    case 'duplicate': await doDuplicate(node); break;
+  }
+}
+
+function startRename(node) {
+  const item = $container.querySelector(`.ft-item[data-path="${CSS.escape(node.path)}"]`);
+  if (!item) return;
+  const nameEl = item.querySelector('.ft-name');
+  if (!nameEl) return;
+
+  const oldName = node.name;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.className = 'ft-rename-input';
+
+  nameEl.replaceWith(input);
+  input.focus();
+  // Select name without extension for files
+  const dotIdx = node.is_dir ? -1 : oldName.lastIndexOf('.');
+  input.setSelectionRange(0, dotIdx > 0 ? dotIdx : oldName.length);
+
+  const commit = async () => {
+    const newName = input.value.trim();
+    if (!newName || newName === oldName) {
+      input.replaceWith(nameEl);
+      return;
+    }
+    const dir = node.path.substring(0, node.path.lastIndexOf('/') + 1);
+    const newPath = dir + newName;
+    try {
+      await butlerRef.api.post('/api/files/rename', { old_path: node.path, new_path: newPath });
+      butlerRef.toast('Renamed', 'success');
+      loadTree();
+      butlerRef.refreshFileTree?.();
+    } catch (e) {
+      butlerRef.toast(`Rename failed: ${e.message}`, 'error');
+      input.replaceWith(nameEl);
+    }
+  };
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    if (e.key === 'Escape') { input.replaceWith(nameEl); }
+    e.stopPropagation();
+  });
+  input.addEventListener('blur', commit, { once: true });
+}
+
+async function doDelete(node) {
+  const label = node.is_dir ? 'folder' : 'file';
+  if (!confirm(`Delete ${label} "${node.name}"?`)) return;
+  try {
+    await butlerRef.api.del(`/api/files/delete?path=${encodeURIComponent(node.path)}`);
+    butlerRef.toast('Deleted', 'success');
+    loadTree();
+  } catch (e) {
+    butlerRef.toast(`Delete failed: ${e.message}`, 'error');
+  }
+}
+
+async function doDuplicate(node) {
+  try {
+    const { new_path } = await butlerRef.api.post('/api/files/duplicate', { path: node.path });
+    butlerRef.toast(`Duplicated → ${new_path.split('/').pop()}`, 'success');
+    loadTree();
+  } catch (e) {
+    butlerRef.toast(`Duplicate failed: ${e.message}`, 'error');
+  }
+}
 
 // ─── Render File Tree ───────────────────────────────────────
 
@@ -22,6 +140,7 @@ function renderTree(children, depth = 0) {
     if (node.is_dir) {
       const isExpanded = expandedPaths.has(node.path);
 
+      item.dataset.path = node.path;
       item.innerHTML = `
         <span class="ft-chevron ${isExpanded ? 'expanded' : ''}">
           <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6 4l4 4-4 4"/></svg>
@@ -36,6 +155,7 @@ function renderTree(children, depth = 0) {
 
       const childWrap = document.createElement('div');
       childWrap.className = `ft-children ${isExpanded ? '' : 'collapsed'}`;
+      childWrap.dataset.path = node.path;
 
       if (isExpanded && node.children) {
         childWrap.appendChild(renderTree(node.children, depth + 1));
@@ -45,12 +165,14 @@ function renderTree(children, depth = 0) {
         e.stopPropagation();
         toggleDir(node, childWrap, item, depth);
       });
+      item.addEventListener('contextmenu', (e) => showFileContextMenu(e, node));
 
       frag.appendChild(item);
       frag.appendChild(childWrap);
     } else {
       const gitClass = node.git_status === 'untracked' ? 'git-untracked' : node.git_status === 'modified' ? 'git-modified' : '';
       item.classList.add(...(gitClass ? [gitClass] : []));
+      item.dataset.path = node.path;
 
       const ext = node.name.split('.').pop()?.toLowerCase();
       item.innerHTML = `
@@ -65,11 +187,11 @@ function renderTree(children, depth = 0) {
 
       item.addEventListener('click', (e) => {
         e.stopPropagation();
-        // Highlight active
         $container.querySelectorAll('.ft-item.active').forEach(el => el.classList.remove('active'));
         item.classList.add('active');
         butlerRef.openFile(node.path);
       });
+      item.addEventListener('contextmenu', (e) => showFileContextMenu(e, node));
 
       frag.appendChild(item);
     }
@@ -104,17 +226,58 @@ async function toggleDir(node, childWrap, item, depth) {
 
 async function loadTree() {
   if (!$container || !butlerRef) return;
+  const seq = ++loadSeq;
   $container.innerHTML = '<div class="editor-loading"><div class="spinner"></div></div>';
 
   try {
     const data = await butlerRef.api.get('/api/files/tree');
+    if (seq !== loadSeq) return;
     $container.innerHTML = '';
     const tree = document.createElement('div');
     tree.className = 'file-tree';
     tree.appendChild(renderTree(data.children));
     $container.appendChild(tree);
   } catch (e) {
+    if (seq !== loadSeq) return;
     $container.innerHTML = `<div class="search-empty">Could not load files: ${esc(e.message)}</div>`;
+  }
+}
+
+async function revealFile(filePath) {
+  if (!$container || !butlerRef) return;
+
+  // Expand all ancestor directories
+  const parts = filePath.split('/');
+  for (let i = 1; i < parts.length; i++) {
+    expandedPaths.add(parts.slice(0, i).join('/'));
+  }
+
+  await loadTree();
+
+  // Sequentially load children for expanded dirs that are deeper than the initial fetch
+  const ancestors = [];
+  for (let i = 1; i < parts.length; i++) {
+    ancestors.push(parts.slice(0, i).join('/'));
+  }
+
+  for (const ancestorPath of ancestors) {
+    const childWrap = $container.querySelector(`.ft-children[data-path="${CSS.escape(ancestorPath)}"]`);
+    if (childWrap && !childWrap.hasChildNodes()) {
+      try {
+        const data = await butlerRef.api.get(`/api/files/tree?path=${encodeURIComponent(ancestorPath)}`);
+        const depth = ancestorPath.split('/').length;
+        childWrap.appendChild(renderTree(data.children, depth));
+        childWrap.classList.remove('collapsed');
+      } catch { /* skip */ }
+    }
+  }
+
+  // Highlight and scroll to file
+  const target = $container.querySelector(`.ft-item[data-path="${CSS.escape(filePath)}"]`);
+  if (target) {
+    $container.querySelectorAll('.ft-item.active').forEach(el => el.classList.remove('active'));
+    target.classList.add('active');
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 }
 
@@ -142,4 +305,5 @@ export default {
   deactivate() {},
 
   refresh() { loadTree(); },
+  revealFile,
 };

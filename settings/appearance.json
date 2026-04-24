@@ -1,7 +1,6 @@
 {
-    "darkmode":  "true",
-    "font-size":  "14px",
-    "zoom-level":  "100%",
-    "theme":  "default",
+    "theme": "dark",
+    "font-size": "16px",
+    "zoom-level": "100%",
     "time-format": "24h"
 }

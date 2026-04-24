@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routers import files, search, settings, sync
+from .routers import calendar, files, search, settings, sync
 
 # ---------------------------------------------------------------------------
 # Workspace resolution
@@ -72,10 +72,25 @@ app.add_middleware(
 )
 
 # --- API routers -----------------------------------------------------------
+app.include_router(calendar.router, prefix="/api/calendar", tags=["calendar"])
 app.include_router(files.router, prefix="/api/files", tags=["files"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(sync.router, prefix="/api/sync", tags=["sync"])
+
+# --- Theme listing ---------------------------------------------------------
+
+@app.get("/api/themes")
+async def list_themes():
+    """Return available theme names from frontend/themes/*.css."""
+    themes_dir = FRONTEND_DIR / "themes"
+    themes = []
+    if themes_dir.exists():
+        for f in sorted(themes_dir.iterdir()):
+            if f.suffix == ".css" and f.is_file():
+                themes.append(f.stem)
+    return {"themes": themes}
+
 
 # --- Plugin metadata -------------------------------------------------------
 
