@@ -257,11 +257,35 @@ a:hover { text-decoration: underline; }
   align-items: stretch;
   gap: 0;
   flex: 1;
+  overflow: hidden;
+}
+#tab-bar::-webkit-scrollbar { display: none; }
+
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
 }
-#tab-bar::-webkit-scrollbar { display: none; }
+.tab-strip::-webkit-scrollbar { display: none; }
+
+.tab-scroll {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex-shrink: 0;
+  font-size: 16px;
+  color: var(--text-3);
+  background: var(--bg-2);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  z-index: 1;
+}
+.tab-scroll:hover { color: var(--text-1); background: var(--bg-3); }
 
 .tab {
   display: flex;
@@ -281,6 +305,9 @@ a:hover { text-decoration: underline; }
 .tab.active {
   color: var(--text-1);
   background: var(--bg-3);
+}
+.tab.preview .tab-name {
+  font-style: italic;
 }
 
 .tab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -704,10 +731,39 @@ a:hover { text-decoration: underline; }
 }
 
 /* ----- Editor area ------------------------------------------ */
+/* Editor toolbar */
+#editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-1);
+  flex-shrink: 0;
+}
+.editor-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 26px;
+  border-radius: 4px;
+  color: var(--text-3);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 150ms, background 150ms;
+}
+.editor-toolbar-btn:hover {
+  color: var(--text-1);
+  background: var(--bg-3);
+}
+
 #editor-container {
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 #editor-container .cm-editor {
@@ -778,8 +834,8 @@ a:hover { text-decoration: underline; }
   background: var(--bg-2);
 }
 
-/* Frontmatter */
-.cm-editor .cm-line .cm-meta { color: var(--text-3); font-family: var(--ff-mono); font-size: 0.9em; }
+/* Frontmatter — match body font */
+.cm-editor .cm-line .cm-meta { color: var(--text-3); }
 
 /* Horizontal rule */
 .cm-editor .cm-line .cm-hr { color: var(--border); }
@@ -1218,6 +1274,37 @@ a:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 .cal-event-chip:hover { opacity: 0.8; }
+
+/* Multi-day spanning styles */
+.cal-event-chip.cal-span {
+  border-radius: 0;
+}
+.cal-event-chip.cal-span-start {
+  border-radius: 3px 0 0 3px;
+  margin-right: -1px;
+}
+.cal-event-chip.cal-span-end {
+  border-radius: 0 3px 3px 0;
+  margin-left: -1px;
+  border-left: none;
+}
+.cal-event-chip.cal-span-mid {
+  border-left: none;
+  margin-left: -1px;
+  margin-right: -1px;
+}
+.cal-event-chip.cal-span-week-break {
+  border-radius: 3px 0 0 3px;
+  margin-right: 0;
+}
+.cal-event-chip.cal-span-week-cont {
+  border-radius: 0 3px 3px 0;
+  margin-left: 0;
+}
+.cal-event-chip.cal-span-mid.cal-span-week-break {
+  border-radius: 0;
+}
+
 .cal-chip-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 
 .cal-task-toggle {
@@ -1612,6 +1699,7 @@ a:hover { text-decoration: underline; }
 .cal-mini-day { cursor: pointer; }
 .cal-mini-day:hover { background: var(--bg-3); color: var(--text-1); }
 .cal-mini-day.today { color: var(--accent); font-weight: 700; box-shadow: inset 0 0 0 1px var(--accent); }
+.cal-mini-day.selected { background: var(--accent); color: var(--bg-1); font-weight: 700; border-radius: 3px; }
 
 /* ----- Calendar Context Menu ------------------------------------ */
 .cal-ctx-menu {
@@ -1853,6 +1941,7 @@ a:hover { text-decoration: underline; }
 }
 .diary-item:hover { background: var(--bg-3); }
 .diary-date { font-size: 12px; color: var(--accent-dim); font-family: var(--ff-mono); }
+.diary-title { font-size: 12px; color: var(--text-1); display: block; }
 .diary-name { font-size: 11px; color: var(--text-3); }
 .diary-empty { padding: 24px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
 
@@ -1963,3 +2052,80 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 .rc-remove-btn:hover { color: var(--red, #f25d5d); background: rgba(242,93,93,0.1); }
+
+/* ─── Attachment Preview (inline widget) ───────────────────── */
+
+.cm-attachment-preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  margin: 0 4px;
+  border-radius: 4px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 150ms, color 150ms;
+}
+.cm-attachment-preview:hover {
+  background: var(--accent-bg);
+  color: var(--text-1);
+}
+.cm-attachment-preview svg {
+  flex-shrink: 0;
+  color: var(--text-3);
+}
+.cm-attachment-name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Zettelkasten Plugin ──────────────────────────────────── */
+
+.zk-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.zk-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.zk-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.zk-new-btn {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  cursor: pointer;
+  transition: background 150ms;
+}
+.zk-new-btn:hover {
+  background: var(--accent);
+  color: var(--bg-1);
+}
+.zk-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.zk-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--text-3);
+  font-size: 13px;
+}

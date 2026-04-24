@@ -56,7 +56,7 @@ function parseRecipe(filename, content) {
   }
 
   // Split steps by ---
-  recipe.steps = body.split(/\n---\n/).map(s => s.trim()).filter(s => s.length > 0);
+  recipe.steps = body.split(/^---$/m).map(s => s.trim()).filter(s => s.length > 0);
 
   return recipe;
 }
@@ -243,6 +243,23 @@ async function createRecipe() {
 
   popup.querySelector('#rc-add-ing').addEventListener('click', () => addIngredientRow());
   popup.querySelector('#rc-add-step').addEventListener('click', () => addStepRow());
+
+  // Enter key adds new ingredient/step row
+  popup.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const target = e.target;
+    if (target.matches('.rc-ing-name, .rc-ing-amount')) {
+      e.preventDefault();
+      addIngredientRow();
+      const last = popup.querySelector('#rc-ingredients .rc-ing-row:last-child .rc-ing-name');
+      if (last) last.focus();
+    } else if (target.matches('.rc-step-text') && !e.shiftKey) {
+      e.preventDefault();
+      addStepRow();
+      const last = popup.querySelector('#rc-steps .rc-step-row:last-child .rc-step-text');
+      if (last) last.focus();
+    }
+  });
 
   popup.querySelector('.cal-btn-discard').addEventListener('click', cleanup);
   popup.querySelector('.cal-btn-save').addEventListener('click', async () => {

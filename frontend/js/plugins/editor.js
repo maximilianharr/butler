@@ -21,7 +21,7 @@ const tabStates = new Map();
 async function loadCM() {
   if (cmModules) return cmModules;
 
-  const [cmCore, cmView, cmState, cmLangMd, cmLang, cmCmds, cmSearch, lezerHL, cmLangData] = await Promise.all([
+  const [cmCore, cmView, cmState, cmLangMd, cmLang, cmCmds, cmSearch, lezerHL, cmLangData, cmAutocomplete] = await Promise.all([
     import('https://esm.sh/codemirror'),
     import('https://esm.sh/@codemirror/view'),
     import('https://esm.sh/@codemirror/state'),
@@ -31,9 +31,10 @@ async function loadCM() {
     import('https://esm.sh/@codemirror/search'),
     import('https://esm.sh/@lezer/highlight'),
     import('https://esm.sh/@codemirror/language-data'),
+    import('https://esm.sh/@codemirror/autocomplete'),
   ]);
 
-  cmModules = { ...cmCore, ...cmView, ...cmState, ...cmLangMd, ...cmLang, ...cmCmds, ...cmSearch, ...lezerHL, ...cmLangData };
+  cmModules = { ...cmCore, ...cmView, ...cmState, ...cmLangMd, ...cmLang, ...cmCmds, ...cmSearch, ...lezerHL, ...cmLangData, ...cmAutocomplete };
   return cmModules;
 }
 
@@ -121,6 +122,134 @@ function clickableLinks(cm) {
       }
       return false;
     }
+  });
+}
+
+// ─── Double-click to open images/attachments ────────────────
+
+function dblClickOpen(cm) {
+  return cm.EditorView.domEventHandlers({
+    dblclick(event, view) {
+      // Check if double-clicked on an image preview widget
+      const imgEl = event.target.closest('.cm-image-preview img');
+      if (imgEl) {
+        const src = imgEl.src;
+        // Extract path from raw API URL
+        const rawMatch = src.match(/\/api\/files\/raw\?path=([^&]+)/);
+        if (rawMatch) {
+          const filePath = decodeURIComponent(rawMatch[1]);
+          butlerRef?.openFile(filePath, { doubleClick: true });
+        } else if (src.startsWith('http')) {
+          window.open(src, '_blank', 'noopener');
+        }
+        event.preventDefault();
+        return true;
+      }
+
+      // Check if double-clicked on an attachment widget
+      const attachEl = event.target.closest('.cm-attachment-preview');
+      if (attachEl) {
+        const href = attachEl.dataset.href;
+        if (href) {
+          window.open(href, '_blank', 'noopener');
+        }
+        event.preventDefault();
+        return true;
+      }
+
+      return false;
+    }
+  });
+}
+
+// ─── File Attachment Decoration (non-image links) ───────────
+
+const ATTACH_IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'];
+
+function attachmentDecorationField(cm) {
+  class AttachWidget extends cm.WidgetType {
+    constructor(url, label, rawHref) { super(); this.url = url; this.label = label; this.rawHref = rawHref; }
+    eq(other) { return this.url === other.url; }
+    toDOM() {
+      const wrap = document.createElement('span');
+      wrap.className = 'cm-attachment-preview';
+      wrap.dataset.href = this.rawHref;
+      wrap.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/></svg>`;
+      const nameEl = document.createElement('span');
+      nameEl.className = 'cm-attachment-name';
+      nameEl.textContent = this.label;
+      wrap.appendChild(nameEl);
+      return wrap;
+    }
+  }
+
+  function isAttachLink(url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) return false;
+    const ext = url.split('.').pop()?.toLowerCase();
+    return ext && !ATTACH_IMAGE_EXTS.includes(ext);
+  }
+
+  function buildDecos(state) {
+    const widgets = [];
+    const doc = state.doc;
+    // Match non-image markdown links: [label](path)  but NOT ![](path)
+    const linkRe = /(?<!!)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+    for (let i = 1; i <= doc.lines; i++) {
+      const line = doc.line(i);
+      let m;
+      while ((m = linkRe.exec(line.text)) !== null) {
+        const url = m[2];
+        if (isAttachLink(url)) {
+          const label = m[1] || url.split('/').pop();
+          const rawHref = resolveImageUrl(url); // reuse — works for any file
+          widgets.push(cm.Decoration.widget({
+            widget: new AttachWidget(url, label, rawHref),
+            side: 1,
+          }).range(line.from + m.index + m[0].length));
+        }
+      }
+      linkRe.lastIndex = 0;
+    }
+    return cm.Decoration.set(widgets, true);
+  }
+
+  return cm.StateField.define({
+    create(state) { return buildDecos(state); },
+    update(value, tr) { return tr.docChanged ? buildDecos(tr.state) : value; },
+    provide: f => cm.EditorView.decorations.from(f),
+  });
+}
+
+// ─── [[ Zettelkasten Autocomplete ───────────────────────────
+
+function zettelkastenAutocomplete(cm) {
+  function zkComplete(context) {
+    const before = context.matchBefore(/\[\[[^\]]*$/);
+    if (!before) return null;
+    const zkPlugin = butlerRef?.getPlugin?.('zettelkasten');
+    const files = zkPlugin?.getFiles?.() || [];
+    if (files.length === 0) return null;
+
+    const query = before.text.substring(2).toLowerCase();
+    const options = files
+      .filter(f => f.label.toLowerCase().includes(query) || f.name.toLowerCase().includes(query))
+      .map(f => ({
+        label: f.label.replace(/\.md$/, ''),
+        apply: (view, _completion, _from, to) => {
+          const display = f.label.replace(/\.md$/, '');
+          view.dispatch({
+            changes: { from: before.from, to, insert: `[[${display}]]` },
+          });
+        },
+        detail: f.path,
+      }));
+
+    return { from: before.from, options, filter: false };
+  }
+
+  return cm.autocompletion({
+    override: [zkComplete],
+    activateOnTyping: true,
   });
 }
 
@@ -407,7 +536,7 @@ function headingStyles(cm) {
     { tag: t.link, color: 'var(--accent)', cursor: 'pointer' },
     { tag: t.url, color: 'var(--accent-dim)' },
     { tag: t.monospace, fontFamily: 'var(--ff-mono)', fontSize: '0.9em', color: 'var(--text-2)' },
-    { tag: t.meta, color: 'var(--text-3)', fontFamily: 'var(--ff-mono)', fontSize: '0.9em' },
+    { tag: t.meta, color: 'var(--text-3)' },
     { tag: t.comment, color: 'var(--text-3)', fontStyle: 'italic' },
     { tag: t.quote, color: 'var(--text-2)', fontStyle: 'italic' },
     { tag: t.keyword, color: 'var(--blue)' },
@@ -463,10 +592,14 @@ function buildExtensions(cm) {
     cm.search(),
     // Block decorations via StateField (not ViewPlugin — CM6 requirement)
     imageDecorationField(cm),
+    attachmentDecorationField(cm),
     ...frontmatterFold(cm),
     // Inline interactions
     clickableLinks(cm),
+    dblClickOpen(cm),
     pasteHandler(cm),
+    // [[ autocomplete
+    zettelkastenAutocomplete(cm),
   ];
 }
 
@@ -540,6 +673,86 @@ function closeTab(path) {
   if (currentPath === path) currentPath = null;
 }
 
+// ─── Editor Toolbar ─────────────────────────────────────────
+
+function buildToolbar(toolbarEl) {
+  if (!toolbarEl) return;
+  toolbarEl.innerHTML = '';
+
+  const items = [
+    {
+      title: 'Insert Link',
+      icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+      action: () => insertAtCursor('[link text](https://)')
+    },
+    {
+      title: 'Attach File',
+      icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/></svg>',
+      action: () => triggerFileUpload(false)
+    },
+    {
+      title: 'Insert Image',
+      icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
+      action: () => triggerFileUpload(true)
+    },
+    {
+      title: 'Insert Recording',
+      icon: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>',
+      action: () => insertAtCursor('[🎙️ recording](recording.mp3)')
+    },
+  ];
+
+  for (const item of items) {
+    const btn = document.createElement('button');
+    btn.className = 'editor-toolbar-btn';
+    btn.title = item.title;
+    btn.innerHTML = item.icon;
+    btn.addEventListener('click', (e) => { e.preventDefault(); item.action(); });
+    toolbarEl.appendChild(btn);
+  }
+}
+
+function insertAtCursor(text) {
+  if (!editorView) return;
+  const pos = editorView.state.selection.main.head;
+  editorView.dispatch({ changes: { from: pos, insert: text } });
+  editorView.focus();
+}
+
+function triggerFileUpload(imageOnly) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  if (imageOnly) input.accept = 'image/*';
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    if (!file || !currentPath || !butlerRef) return;
+
+    const lastSlash = currentPath.lastIndexOf('/');
+    const dir = lastSlash >= 0 ? currentPath.substring(0, lastSlash + 1) : 'inbox/';
+
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+
+    try {
+      const res = await fetch(`/api/files/upload-image?plugin=${encodeURIComponent(dir)}`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+      const { path: relPath } = await res.json();
+      const fileName = relPath.split('/').pop();
+
+      const isImage = ATTACH_IMAGE_EXTS.includes(file.name.split('.').pop()?.toLowerCase());
+      const md = isImage ? `![${file.name}](${fileName})` : `[${file.name}](${fileName})`;
+      insertAtCursor(md);
+      butlerRef.toast(`${isImage ? 'Image' : 'File'} attached`, 'success');
+    } catch (e) {
+      butlerRef.toast(`Upload failed: ${e.message}`, 'error');
+    }
+  });
+  input.click();
+}
+
 // ─── Plugin Interface ───────────────────────────────────────
 
 export default {
@@ -554,7 +767,11 @@ export default {
     container.innerHTML = '<div class="editor-loading"><div class="spinner"></div><span>Loading editor…</span></div>';
 
     try {
-      container.innerHTML = '<div id="editor-container"></div>';
+      container.innerHTML = `
+        <div id="editor-toolbar"></div>
+        <div id="editor-container"></div>
+      `;
+      buildToolbar(document.getElementById('editor-toolbar'));
       const editorEl = document.getElementById('editor-container');
       await switchToFile(path, editorEl);
     } catch (e) {

@@ -191,6 +191,10 @@ function renderTree(children, depth = 0) {
         item.classList.add('active');
         butlerRef.openFile(node.path);
       });
+      item.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        butlerRef.openFile(node.path, { doubleClick: true });
+      });
       item.addEventListener('contextmenu', (e) => showFileContextMenu(e, node));
 
       frag.appendChild(item);

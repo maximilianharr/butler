@@ -52,6 +52,8 @@ const state = {
   activeTab: null,  // path of active tab
 };
 
+let tabStripObserver = null;
+
 // ─── DOM References ─────────────────────────────────────────
 
 const $abTop = document.getElementById('ab-top');
@@ -74,7 +76,7 @@ const $tabContextMenu = document.getElementById('tab-context-menu');
  *   'full'   — takes over the main area entirely
  */
 const plugins = {};
-const pluginOrder = { top: ['search', 'files', 'calendar', 'recipes', 'diary'], bottom: ['sync', 'settings'] };
+const pluginOrder = { top: ['search', 'files', 'zettelkasten', 'calendar', 'recipes', 'diary'], bottom: ['sync', 'settings'] };
 
 async function registerPlugin(name, modulePath) {
   try {
@@ -186,6 +188,7 @@ function defaultIcon(name) {
     settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
     recipes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path d="M15 2.5c1 1.5 2 4 2 9.5M12 2v10M7 12a5 5 0 0 0 10 0"/></svg>',
     diary: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h6"/></svg>',
+    zettelkasten: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l2.5-3h13L21 8"/><path d="M3 8v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8"/><path d="M8 8v12"/><path d="M12 8v12"/><path d="M16 8v12"/></svg>',
   };
   return icons[name] || '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
 }
@@ -281,7 +284,10 @@ const butler = {
   toast,
   state,
 
-  openFile(path) {
+  getPlugin(name) { return plugins[name]; },
+
+  openFile(path, opts = {}) {
+    const isDouble = opts.doubleClick === true;
     state.currentFile = path;
 
     // Check if it's an image file
@@ -292,8 +298,19 @@ const butler = {
         state.activePlugin = null;
         updateActiveIcon();
       }
-      if (!state.openTabs.find(t => t.path === path)) {
-        state.openTabs.push({ path, name: path.split('/').pop() });
+      const existing = state.openTabs.find(t => t.path === path);
+      if (existing) {
+        if (isDouble) existing.preview = false;
+      } else {
+        // Replace existing preview tab if single-click
+        if (!isDouble) {
+          const prevIdx = state.openTabs.findIndex(t => t.preview);
+          if (prevIdx !== -1) {
+            if (plugins.editor) plugins.editor.closeTab(state.openTabs[prevIdx].path);
+            state.openTabs.splice(prevIdx, 1);
+          }
+        }
+        state.openTabs.push({ path, name: path.split('/').pop(), preview: !isDouble });
       }
       state.activeTab = path;
       renderImageViewer(path);
@@ -311,8 +328,19 @@ const butler = {
     }
 
     // Add tab if not already open
-    if (!state.openTabs.find(t => t.path === path)) {
-      state.openTabs.push({ path, name: path.split('/').pop() });
+    const existing = state.openTabs.find(t => t.path === path);
+    if (existing) {
+      if (isDouble) existing.preview = false;
+    } else {
+      // Replace existing preview tab if single-click
+      if (!isDouble) {
+        const prevIdx = state.openTabs.findIndex(t => t.preview);
+        if (prevIdx !== -1) {
+          if (plugins.editor) plugins.editor.closeTab(state.openTabs[prevIdx].path);
+          state.openTabs.splice(prevIdx, 1);
+        }
+      }
+      state.openTabs.push({ path, name: path.split('/').pop(), preview: !isDouble });
     }
     state.activeTab = path;
 
@@ -321,7 +349,10 @@ const butler = {
     renderTabBar();
   },
 
-  onTabDirtyChange(_path, _dirty) {
+  onTabDirtyChange(path, _dirty) {
+    // Pin preview tab when edited
+    const tab = state.openTabs.find(t => t.path === path);
+    if (tab && tab.preview) tab.preview = false;
     renderTabBar();
   },
 
@@ -338,9 +369,22 @@ function renderTabBar() {
   if (!$tabBar) return;
   $tabBar.innerHTML = '';
 
+  // Scroll left arrow
+  const scrollLeft = document.createElement('button');
+  scrollLeft.className = 'tab-scroll tab-scroll-left';
+  scrollLeft.textContent = '‹';
+  scrollLeft.addEventListener('click', () => {
+    tabStrip.scrollBy({ left: -120, behavior: 'smooth' });
+  });
+  $tabBar.appendChild(scrollLeft);
+
+  // Scrollable tab strip
+  const tabStrip = document.createElement('div');
+  tabStrip.className = 'tab-strip';
+
   for (const tab of state.openTabs) {
     const el = document.createElement('div');
-    el.className = 'tab' + (tab.path === state.activeTab ? ' active' : '');
+    el.className = 'tab' + (tab.path === state.activeTab ? ' active' : '') + (tab.preview ? ' preview' : '');
     el.dataset.path = tab.path;
 
     const name = document.createElement('span');
@@ -362,9 +406,36 @@ function renderTabBar() {
     el.appendChild(close);
 
     el.addEventListener('click', () => switchTab(tab.path));
+    el.addEventListener('dblclick', () => {
+      const t = state.openTabs.find(t => t.path === tab.path);
+      if (t && t.preview) { t.preview = false; renderTabBar(); }
+    });
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); showTabContextMenu(e, tab.path); });
 
-    $tabBar.appendChild(el);
+    tabStrip.appendChild(el);
+  }
+  $tabBar.appendChild(tabStrip);
+
+  // Scroll right arrow
+  const scrollRight = document.createElement('button');
+  scrollRight.className = 'tab-scroll tab-scroll-right';
+  scrollRight.textContent = '›';
+  scrollRight.addEventListener('click', () => {
+    tabStrip.scrollBy({ left: 120, behavior: 'smooth' });
+  });
+  $tabBar.appendChild(scrollRight);
+
+  // Show/hide scroll arrows based on overflow
+  const updateScrollArrows = () => {
+    const hasOverflow = tabStrip.scrollWidth > tabStrip.clientWidth;
+    scrollLeft.style.display = hasOverflow ? '' : 'none';
+    scrollRight.style.display = hasOverflow ? '' : 'none';
+  };
+  requestAnimationFrame(updateScrollArrows);
+  if (typeof ResizeObserver !== 'undefined') {
+    if (tabStripObserver) tabStripObserver.disconnect();
+    tabStripObserver = new ResizeObserver(updateScrollArrows);
+    tabStripObserver.observe(tabStrip);
   }
 }
 
@@ -511,6 +582,7 @@ window.addEventListener('beforeunload', (e) => {
   await Promise.all([
     registerPlugin('search', '/js/plugins/search.js'),
     registerPlugin('files', '/js/plugins/files.js'),
+    registerPlugin('zettelkasten', '/js/plugins/zettelkasten.js'),
     registerPlugin('calendar', '/js/plugins/calendar.js'),
     registerPlugin('recipes', '/js/plugins/recipes.js'),
     registerPlugin('diary', '/js/plugins/diary.js'),

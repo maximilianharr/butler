@@ -328,6 +328,29 @@ function buildMonthView() {
         chip.style.background = color.bg;
         chip.style.borderLeftColor = color.border;
 
+        // Multi-day spanning styles
+        const evStart = ev.start || ev.date;
+        const evEnd = ev.end;
+        if (evStart && evEnd) {
+          const sd = new Date(evStart);
+          const ed = new Date(evEnd);
+          const startLocal = `${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, '0')}-${String(sd.getDate()).padStart(2, '0')}`;
+          const endLocal = `${ed.getFullYear()}-${String(ed.getMonth() + 1).padStart(2, '0')}-${String(ed.getDate()).padStart(2, '0')}`;
+          if (startLocal !== endLocal) {
+            // Multi-day event
+            const isStart = dateStr === startLocal;
+            const isEnd = dateStr === endLocal;
+            const isWeekEnd = c === 6; // Sunday column
+            const isWeekStart = c === 0; // Monday column
+            chip.classList.add('cal-span');
+            if (isStart) chip.classList.add('cal-span-start');
+            else if (isEnd) chip.classList.add('cal-span-end');
+            else chip.classList.add('cal-span-mid');
+            if (isWeekEnd && !isEnd) chip.classList.add('cal-span-week-break');
+            if (isWeekStart && !isStart) chip.classList.add('cal-span-week-cont');
+          }
+        }
+
         // Drag & drop
         chip.draggable = true;
         chip.addEventListener('dragstart', (e) => {
@@ -991,6 +1014,7 @@ function showMiniCalendar(anchor) {
       const c = el('span', 'cal-mini-cell cal-mini-day');
       c.textContent = d;
       if (today.getFullYear() === y && today.getMonth() === m && today.getDate() === d) c.classList.add('today');
+      if (currentDate.getFullYear() === y && currentDate.getMonth() === m && currentDate.getDate() === d) c.classList.add('selected');
       c.addEventListener('click', (e) => {
         e.stopPropagation();
         currentDate = new Date(y, m, d);
@@ -1040,10 +1064,14 @@ function getEventsForDate(dateStr) {
   return events.filter(ev => {
     const st = ev.start || ev.date;
     if (!st) return false;
-    // Compare using local date to avoid UTC timezone shift
-    const d = new Date(st);
-    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return local === dateStr;
+    const startD = new Date(st);
+    const startLocal = `${startD.getFullYear()}-${String(startD.getMonth() + 1).padStart(2, '0')}-${String(startD.getDate()).padStart(2, '0')}`;
+    // Single-day: just check start date
+    if (!ev.end) return startLocal === dateStr;
+    // Multi-day: check if dateStr falls within [start, end]
+    const endD = new Date(ev.end);
+    const endLocal = `${endD.getFullYear()}-${String(endD.getMonth() + 1).padStart(2, '0')}-${String(endD.getDate()).padStart(2, '0')}`;
+    return dateStr >= startLocal && dateStr <= endLocal;
   });
 }
 

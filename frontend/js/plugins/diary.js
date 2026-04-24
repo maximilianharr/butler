@@ -8,6 +8,7 @@
 
 let $container = null;
 let butlerRef = null;
+let renderSeq = 0;
 
 async function fetchEntries() {
   try {
@@ -20,8 +21,9 @@ async function fetchEntries() {
   }
 }
 
-function render(entries) {
+async function render(entries) {
   if (!$container) return;
+  const seq = ++renderSeq;
   $container.innerHTML = '';
 
   const wrap = el('div', 'diary-container');
@@ -42,15 +44,41 @@ function render(entries) {
   for (const entry of entries) {
     const item = el('div', 'diary-item');
     const dateStr = formatEntryDate(entry.name);
-    item.innerHTML = `
-      <span class="diary-date">${esc(dateStr)}</span>
-      <span class="diary-name">${esc(entry.name)}</span>
-    `;
+    // Title will be populated async
+    const titleSpan = el('span', 'diary-title');
+    titleSpan.textContent = dateStr;
+    const nameSpan = el('span', 'diary-name');
+    nameSpan.textContent = entry.name;
+    item.appendChild(titleSpan);
+    item.appendChild(nameSpan);
     item.addEventListener('click', () => butlerRef.openFile(`diary/${entry.name}`));
     list.appendChild(item);
+
+    // Fetch title in background
+    fetchTitle(entry.name).then(title => {
+      if (seq !== renderSeq) return;
+      if (title) titleSpan.textContent = title;
+    });
   }
   wrap.appendChild(list);
   $container.appendChild(wrap);
+}
+
+async function fetchTitle(filename) {
+  try {
+    const data = await butlerRef.api.get(`/api/files/read?path=diary/${encodeURIComponent(filename)}`);
+    const content = data.content || '';
+    // Skip frontmatter
+    let body = content;
+    if (body.startsWith('---')) {
+      const endIdx = body.indexOf('---', 3);
+      if (endIdx !== -1) body = body.substring(endIdx + 3);
+    }
+    const m = body.match(/^#\s+(.+)$/m);
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 function formatEntryDate(filename) {

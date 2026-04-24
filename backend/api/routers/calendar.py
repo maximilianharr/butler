@@ -101,13 +101,15 @@ async def list_events(
     events = []
     for p in sorted(cal.glob("*.md")):
         ev = _parse_event(p)
-        # Date-range filter
+        # Date-range overlap filter: event overlaps [start, end) window if
+        # eventStart < end AND eventEnd >= start
         ev_start = ev.get("start") or ev.get("date")
-        if ev_start and start:
-            if str(ev_start) < start:
-                continue
+        ev_end = ev.get("end") or ev_start
         if ev_start and end:
             if str(ev_start) >= end:
+                continue
+        if ev_end and start:
+            if str(ev_end) < start:
                 continue
         events.append(ev)
 
