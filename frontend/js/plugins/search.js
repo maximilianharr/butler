@@ -73,8 +73,8 @@ async function doSearch(query) {
         item.className = 'sr-item';
 
         const highlighted = highlightMatch(match.text, query);
-        const ctxBefore = match.context_before ? `<div>${esc(match.context_before)}</div>` : '';
-        const ctxAfter = match.context_after ? `<div>${esc(match.context_after)}</div>` : '';
+        const ctxBefore = match.context_before != null ? `<div>${esc(match.context_before)}</div>` : '';
+        const ctxAfter = match.context_after != null ? `<div>${esc(match.context_after)}</div>` : '';
 
         item.innerHTML = `
           <div class="sr-file">

@@ -13,6 +13,8 @@ let currentView = 'month';
 let events = [];
 let groups = new Set();
 let hiddenGroups = new Set();
+let groupLabels = {};  // color → custom label, loaded from settings
+let draggedEvent = null;
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const MONTHS = [
@@ -31,6 +33,68 @@ const GROUP_COLORS = {
 
 function gc(group) {
   return GROUP_COLORS[group] || GROUP_COLORS.blue;
+}
+
+function groupName(group) {
+  return groupLabels[group] || group;
+}
+
+async function loadGroupLabels() {
+  try {
+    const data = await butlerRef.api.get('/api/settings/calendar');
+    groupLabels = data?.data?.group_labels || {};
+  } catch { groupLabels = {}; }
+}
+
+async function saveGroupLabels() {
+  try {
+    await butlerRef.api.put('/api/settings/calendar', { data: { group_labels: groupLabels } });
+  } catch (e) { butlerRef.toast(`Save failed: ${e.message}`, 'error'); }
+}
+
+// ─── Popup Helpers ──────────────────────────────────────────
+
+function createOverlay(onClose) {
+  const overlay = el('div', 'cal-overlay');
+  const cleanup = () => { overlay.remove(); document.removeEventListener('keydown', escHandler); };
+  const escHandler = (e) => { if (e.key === 'Escape') { cleanup(); if (onClose) onClose(); } };
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); if (onClose) onClose(); } });
+  document.addEventListener('keydown', escHandler);
+  overlay._cleanup = cleanup;
+  return overlay;
+}
+
+function addCloseButton(popup, overlay) {
+  const xBtn = el('button', 'cal-popup-close');
+  xBtn.innerHTML = '✕';
+  xBtn.addEventListener('click', () => overlay._cleanup());
+  popup.prepend(xBtn);
+}
+
+// ─── Context Menu Helper ────────────────────────────────────
+
+function showContextMenu(x, y, items) {
+  document.querySelector('.cal-ctx-menu')?.remove();
+  const menu = el('div', 'cal-ctx-menu');
+  for (const item of items) {
+    const row = el('div', 'cal-ctx-item');
+    row.textContent = item.label;
+    row.addEventListener('click', (e) => { e.stopPropagation(); menu.remove(); item.action(); });
+    menu.appendChild(row);
+  }
+  // Clamp to viewport
+  document.body.appendChild(menu);
+  const rect = menu.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth) x = window.innerWidth - rect.width - 4;
+  if (y + rect.height > window.innerHeight) y = window.innerHeight - rect.height - 4;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+
+  const close = (ev) => {
+    if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('mousedown', close); }
+  };
+  setTimeout(() => document.addEventListener('mousedown', close), 0);
+  return menu;
 }
 
 // ─── API ────────────────────────────────────────────────────
@@ -249,11 +313,32 @@ function buildMonthView() {
       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
       const dayEvents = getEventsForDate(dateStr).filter(e => !hiddenGroups.has(e.group));
 
+      // Drop target for drag & drop
+      cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('cal-drop-target'); });
+      cell.addEventListener('dragleave', () => cell.classList.remove('cal-drop-target'));
+      cell.addEventListener('drop', (e) => {
+        e.preventDefault();
+        cell.classList.remove('cal-drop-target');
+        if (draggedEvent) handleEventDrop(draggedEvent, dateStr);
+      });
+
       for (const ev of dayEvents.slice(0, 3)) {
         const chip = el('div', `cal-event-chip ${ev.type === 'task' ? 'cal-task-chip' : ''}`);
         const color = gc(ev.group);
         chip.style.background = color.bg;
         chip.style.borderLeftColor = color.border;
+
+        // Drag & drop
+        chip.draggable = true;
+        chip.addEventListener('dragstart', (e) => {
+          draggedEvent = ev;
+          chip.classList.add('cal-dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        chip.addEventListener('dragend', () => {
+          draggedEvent = null;
+          chip.classList.remove('cal-dragging');
+        });
 
         const title = el('span', 'cal-chip-title');
         title.textContent = ev.title || '(untitled)';
@@ -267,6 +352,18 @@ function buildMonthView() {
         }
 
         chip.addEventListener('click', (e) => { e.stopPropagation(); showEventPopup(ev); });
+
+        // Right-click on event chip
+        chip.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          showContextMenu(e.clientX, e.clientY, [
+            { label: 'Edit', action: () => showEventPopup(ev) },
+            { label: 'View', action: () => showViewPopup(ev) },
+            { label: 'Delete', action: () => { if (confirm(`Delete "${ev.title}"?`)) deleteEvent(ev.filename); } },
+          ]);
+        });
+
         cell.appendChild(chip);
       }
 
@@ -280,13 +377,92 @@ function buildMonthView() {
         cell.appendChild(more);
       }
 
+      // Left-click on empty cell → new event
       cell.addEventListener('click', () => showEventPopup(null, dateStr));
+
+      // Right-click on day cell → context menu
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showContextMenu(e.clientX, e.clientY, [
+          { label: 'New Meeting', action: () => showEventPopup(null, dateStr, null, 'event') },
+          { label: 'New Task', action: () => showEventPopup(null, dateStr, null, 'task') },
+        ]);
+      });
+
       row.appendChild(cell);
     }
     grid.appendChild(row);
   }
 
   return grid;
+}
+
+// ─── Drag & Drop Handler ────────────────────────────────────
+
+async function handleEventDrop(ev, newDateStr) {
+  const oldStart = ev.start || ev.date;
+  if (!oldStart) return;
+
+  const oldDate = new Date(oldStart);
+  const [ny, nm, nd] = newDateStr.split('-').map(Number);
+  const newDate = new Date(ny, nm - 1, nd, oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds());
+  const deltaMs = newDate.getTime() - new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate(),
+    oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds()).getTime();
+
+  const data = { ...ev };
+  delete data.filename;
+  delete data.body;
+  data.body = ev.body || '';
+
+  // Shift start
+  if (data.start) {
+    const d = new Date(new Date(data.start).getTime() + deltaMs);
+    data.start = d.toISOString();
+  }
+  if (data.date) {
+    const d = new Date(new Date(data.date).getTime() + deltaMs);
+    data.date = d.toISOString();
+  }
+  // Shift end by same delta
+  if (data.end) {
+    const d = new Date(new Date(data.end).getTime() + deltaMs);
+    data.end = d.toISOString();
+  }
+
+  await saveEvent(data, ev.filename);
+}
+
+// ─── View Popup (read-only) ─────────────────────────────────
+
+function showViewPopup(ev) {
+  const overlay = createOverlay();
+  const popup = el('div', 'cal-popup cal-view-popup');
+  addCloseButton(popup, overlay);
+
+  const color = gc(ev.group);
+  popup.insertAdjacentHTML('beforeend', `
+    <h3 style="border-left: 4px solid ${color.border}; padding-left: 10px;">${esc(ev.title || '(untitled)')}</h3>
+    <div class="cal-view-details">
+      <div class="cal-view-row"><strong>Type:</strong> ${esc(ev.type || 'event')}</div>
+      <div class="cal-view-row"><strong>Group:</strong> <span style="color:${color.text}">${esc(groupName(ev.group))}</span></div>
+      ${ev.start ? `<div class="cal-view-row"><strong>Start:</strong> ${new Date(ev.start).toLocaleString()}</div>` : ''}
+      ${ev.end ? `<div class="cal-view-row"><strong>End:</strong> ${new Date(ev.end).toLocaleString()}</div>` : ''}
+      ${ev.location ? `<div class="cal-view-row"><strong>Location:</strong> 📍 ${esc(ev.location)}</div>` : ''}
+      ${ev.type === 'task' ? `<div class="cal-view-row"><strong>Status:</strong> ${ev.done ? '✅ Done' : '⬜ To do'}</div>` : ''}
+      ${ev.body ? `<div class="cal-view-body">${esc(ev.body)}</div>` : ''}
+    </div>
+    <div class="cal-popup-actions">
+      <button class="cal-btn-save" data-action="edit">Edit</button>
+    </div>
+  `);
+
+  popup.querySelector('[data-action="edit"]')?.addEventListener('click', () => {
+    overlay._cleanup();
+    showEventPopup(ev);
+  });
+
+  overlay.appendChild(popup);
+  document.body.appendChild(overlay);
 }
 
 // ─── Week View ──────────────────────────────────────────────
@@ -350,6 +526,14 @@ function buildWeekView() {
         chip.style.borderLeftColor = color.border;
         chip.textContent = ev.title || '(untitled)';
         chip.addEventListener('click', (e) => { e.stopPropagation(); showEventPopup(ev); });
+        chip.addEventListener('contextmenu', (e) => {
+          e.preventDefault(); e.stopPropagation();
+          showContextMenu(e.clientX, e.clientY, [
+            { label: 'Edit', action: () => showEventPopup(ev) },
+            { label: 'View', action: () => showViewPopup(ev) },
+            { label: 'Delete', action: () => { if (confirm(`Delete "${ev.title}"?`)) deleteEvent(ev.filename); } },
+          ]);
+        });
         cell.appendChild(chip);
       }
 
@@ -357,6 +541,16 @@ function buildWeekView() {
         const dt = new Date(d);
         dt.setHours(h, 0, 0, 0);
         showEventPopup(null, null, dt);
+      });
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const dt = new Date(d);
+        dt.setHours(h, 0, 0, 0);
+        const ds = isoDate(d);
+        showContextMenu(e.clientX, e.clientY, [
+          { label: 'New Meeting', action: () => showEventPopup(null, ds, dt, 'event') },
+          { label: 'New Task', action: () => showEventPopup(null, ds, dt, 'task') },
+        ]);
       });
       row.appendChild(cell);
     }
@@ -407,6 +601,14 @@ function buildDayView() {
       `;
 
       card.addEventListener('click', () => showEventPopup(ev));
+      card.addEventListener('contextmenu', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        showContextMenu(e.clientX, e.clientY, [
+          { label: 'Edit', action: () => showEventPopup(ev) },
+          { label: 'View', action: () => showViewPopup(ev) },
+          { label: 'Delete', action: () => { if (confirm(`Delete "${ev.title}"?`)) deleteEvent(ev.filename); } },
+        ]);
+      });
       content.appendChild(card);
     }
 
@@ -415,6 +617,17 @@ function buildDayView() {
         const dt = new Date(currentDate);
         dt.setHours(h, 0, 0, 0);
         showEventPopup(null, null, dt);
+      }
+    });
+    content.addEventListener('contextmenu', (e) => {
+      if (e.target === content) {
+        e.preventDefault();
+        const dt = new Date(currentDate);
+        dt.setHours(h, 0, 0, 0);
+        showContextMenu(e.clientX, e.clientY, [
+          { label: 'New Meeting', action: () => showEventPopup(null, dateStr, dt, 'event') },
+          { label: 'New Task', action: () => showEventPopup(null, dateStr, dt, 'task') },
+        ]);
       }
     });
     row.appendChild(content);
@@ -493,31 +706,35 @@ function buildYearView() {
 
 // ─── Event Popup (Create/Edit) ──────────────────────────────
 
-function showEventPopup(ev = null, dateStr = null, dt = null) {
+function showEventPopup(ev = null, dateStr = null, dt = null, presetType = null) {
   const isEdit = !!ev;
-  const overlay = el('div', 'cal-overlay');
+  const overlay = createOverlay();
 
   const popup = el('div', 'cal-popup');
-  popup.innerHTML = `
+  addCloseButton(popup, overlay);
+
+  const initialType = presetType || ev?.type || 'event';
+
+  popup.insertAdjacentHTML('beforeend', `
     <h3>${isEdit ? 'Edit Event' : 'New Event'}</h3>
     <div class="cal-form">
       <label>Title<input type="text" id="cal-f-title" value="${esc(ev?.title || '')}" /></label>
       <div class="cal-form-row">
         <label class="cal-type-group">
           ${['event', 'task'].map(t =>
-            `<button class="cal-type-btn ${(ev?.type || 'event') === t ? 'active' : ''}" data-type="${t}">${t.charAt(0).toUpperCase() + t.slice(1)}</button>`
+            `<button class="cal-type-btn ${initialType === t ? 'active' : ''}" data-type="${t}">${t.charAt(0).toUpperCase() + t.slice(1)}</button>`
           ).join('')}
         </label>
       </div>
       <div class="cal-form-row">
         <label>Start<input type="datetime-local" id="cal-f-start" value="${dtLocalValue(ev, dateStr, dt)}" /></label>
-        <label>End<input type="datetime-local" id="cal-f-end" value="${dtLocalValueEnd(ev)}" /></label>
+        <label>End<input type="datetime-local" id="cal-f-end" value="${dtLocalValueEnd(ev, dateStr, dt)}" /></label>
       </div>
       <div class="cal-form-row">
         <label>Group
           <select id="cal-f-group">
             ${Object.keys(GROUP_COLORS).map(g =>
-              `<option value="${g}" ${(ev?.group || 'blue') === g ? 'selected' : ''}>${g}</option>`
+              `<option value="${g}" ${(ev?.group || 'blue') === g ? 'selected' : ''}>${groupName(g)}</option>`
             ).join('')}
           </select>
         </label>
@@ -531,10 +748,10 @@ function showEventPopup(ev = null, dateStr = null, dt = null) {
       <button class="cal-btn-discard">Discard</button>
       <button class="cal-btn-save">Save</button>
     </div>
-  `;
+  `);
 
   // Type toggle
-  let selectedType = ev?.type || 'event';
+  let selectedType = initialType;
   popup.querySelectorAll('.cal-type-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       popup.querySelectorAll('.cal-type-btn').forEach(b => b.classList.remove('active'));
@@ -543,9 +760,24 @@ function showEventPopup(ev = null, dateStr = null, dt = null) {
     });
   });
 
+  // Start → End date sync
+  const $start = popup.querySelector('#cal-f-start');
+  const $end = popup.querySelector('#cal-f-end');
+  $start.addEventListener('change', () => {
+    if (!$start.value) return;
+    const startDt = new Date($start.value);
+    if (selectedType === 'task') {
+      // Tasks: end = same date, end of day
+      $end.value = toLocalInput(new Date(startDt.getFullYear(), startDt.getMonth(), startDt.getDate(), 23, 59).toISOString());
+    } else {
+      // Events: end = start + 1 hour
+      const endDt = new Date(startDt.getTime() + 3600000);
+      $end.value = toLocalInput(endDt.toISOString());
+    }
+  });
+
   // Actions
-  popup.querySelector('.cal-btn-discard')?.addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  popup.querySelector('.cal-btn-discard')?.addEventListener('click', () => overlay._cleanup());
 
   popup.querySelector('.cal-btn-save')?.addEventListener('click', async () => {
     const data = {
@@ -561,13 +793,13 @@ function showEventPopup(ev = null, dateStr = null, dt = null) {
       data.date = data.start;
       data.done = ev?.done || false;
     }
-    overlay.remove();
+    overlay._cleanup();
     await saveEvent(data, isEdit ? ev.filename : null);
   });
 
   popup.querySelector('.cal-btn-delete')?.addEventListener('click', async () => {
     if (confirm(`Delete "${ev.title}"?`)) {
-      overlay.remove();
+      overlay._cleanup();
       await deleteEvent(ev.filename);
     }
   });
@@ -578,12 +810,13 @@ function showEventPopup(ev = null, dateStr = null, dt = null) {
 }
 
 function showDayPopup(dateStr, dayEvents) {
-  const overlay = el('div', 'cal-overlay');
+  const overlay = createOverlay();
   const popup = el('div', 'cal-popup cal-day-popup');
+  addCloseButton(popup, overlay);
 
   const parts = dateStr.split('-');
   const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
-  popup.innerHTML = `<h3>${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}</h3>`;
+  popup.insertAdjacentHTML('beforeend', `<h3>${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}</h3>`);
 
   const list = el('div', 'cal-day-list');
   for (const ev of dayEvents) {
@@ -597,13 +830,24 @@ function showDayPopup(dateStr, dayEvents) {
       <span class="cal-dl-title">${esc(ev.title || '(untitled)')}</span>
       ${ev.type === 'task' ? `<span class="cal-task-toggle ${ev.done ? 'done' : ''}">${ev.done ? '✓' : ''}</span>` : ''}
     `;
-    item.addEventListener('click', () => { overlay.remove(); showEventPopup(ev); });
+    item.addEventListener('click', () => { overlay._cleanup(); showEventPopup(ev); });
+
+    // Right-click on event in day popup
+    item.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showContextMenu(e.clientX, e.clientY, [
+        { label: 'Edit', action: () => { overlay._cleanup(); showEventPopup(ev); } },
+        { label: 'View', action: () => { overlay._cleanup(); showViewPopup(ev); } },
+        { label: 'Delete', action: () => { if (confirm(`Delete "${ev.title}"?`)) { overlay._cleanup(); deleteEvent(ev.filename); } } },
+      ]);
+    });
 
     const taskToggle = item.querySelector('.cal-task-toggle');
     if (taskToggle) {
       taskToggle.addEventListener('click', (e) => {
         e.stopPropagation();
-        overlay.remove();
+        overlay._cleanup();
         toggleDone(ev);
       });
     }
@@ -615,14 +859,13 @@ function showDayPopup(dateStr, dayEvents) {
   const actions = el('div', 'cal-popup-actions');
   const closeBtn = el('button', 'cal-btn-discard');
   closeBtn.textContent = 'Close';
-  closeBtn.addEventListener('click', () => overlay.remove());
+  closeBtn.addEventListener('click', () => overlay._cleanup());
   const newBtn = el('button', 'cal-btn-save');
   newBtn.textContent = '+ New';
-  newBtn.addEventListener('click', () => { overlay.remove(); showEventPopup(null, dateStr); });
+  newBtn.addEventListener('click', () => { overlay._cleanup(); showEventPopup(null, dateStr); });
   actions.append(closeBtn, newBtn);
   popup.appendChild(actions);
 
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
   overlay.appendChild(popup);
   document.body.appendChild(overlay);
 }
@@ -649,7 +892,43 @@ function showGroupFilter(e) {
     swatch.style.background = gc(g).border;
 
     const label = el('span', 'cal-gf-label');
-    label.textContent = g;
+    label.textContent = groupName(g);
+
+    // Right-click to rename group label
+    function attachRenameHandler(lbl) {
+      lbl.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'cal-gf-rename';
+        input.value = groupName(g);
+        lbl.replaceWith(input);
+        input.focus();
+        input.select();
+
+        let committed = false;
+        const commit = async () => {
+          if (committed) return;
+          committed = true;
+          const newName = input.value.trim();
+          if (newName && newName !== g) {
+            groupLabels[g] = newName;
+          } else {
+            delete groupLabels[g];
+          }
+          await saveGroupLabels();
+          const restored = el('span', 'cal-gf-label');
+          restored.textContent = groupName(g);
+          input.replaceWith(restored);
+          attachRenameHandler(restored);
+        };
+
+        input.addEventListener('keydown', (ke) => { if (ke.key === 'Enter') commit(); if (ke.key === 'Escape') { input.replaceWith(lbl); } });
+        input.addEventListener('blur', commit);
+      });
+    }
+    attachRenameHandler(label);
 
     row.append(cb, swatch, label);
     dd.appendChild(row);
@@ -776,8 +1055,11 @@ function dtLocalValue(ev, dateStr, dt) {
   return '';
 }
 
-function dtLocalValueEnd(ev) {
+function dtLocalValueEnd(ev, dateStr = null, dt = null) {
   if (ev?.end) return toLocalInput(ev.end);
+  // Default end for new events: start + 1h
+  if (dt) { const e = new Date(dt.getTime() + 3600000); return toLocalInput(e.toISOString()); }
+  if (dateStr) return `${dateStr}T10:00`;
   return '';
 }
 
@@ -795,6 +1077,7 @@ async function init(container, butler) {
   butlerRef = butler;
   $root = container;
   $root.classList.add('cal-root');
+  await loadGroupLabels();
   await refresh();
 }
 

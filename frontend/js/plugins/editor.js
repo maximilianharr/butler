@@ -21,7 +21,7 @@ const tabStates = new Map();
 async function loadCM() {
   if (cmModules) return cmModules;
 
-  const [cmCore, cmView, cmState, cmLangMd, cmLang, cmCmds, cmSearch, lezerHL] = await Promise.all([
+  const [cmCore, cmView, cmState, cmLangMd, cmLang, cmCmds, cmSearch, lezerHL, cmLangData] = await Promise.all([
     import('https://esm.sh/codemirror'),
     import('https://esm.sh/@codemirror/view'),
     import('https://esm.sh/@codemirror/state'),
@@ -30,9 +30,10 @@ async function loadCM() {
     import('https://esm.sh/@codemirror/commands'),
     import('https://esm.sh/@codemirror/search'),
     import('https://esm.sh/@lezer/highlight'),
+    import('https://esm.sh/@codemirror/language-data'),
   ]);
 
-  cmModules = { ...cmCore, ...cmView, ...cmState, ...cmLangMd, ...cmLang, ...cmCmds, ...cmSearch, ...lezerHL };
+  cmModules = { ...cmCore, ...cmView, ...cmState, ...cmLangMd, ...cmLang, ...cmCmds, ...cmSearch, ...lezerHL, ...cmLangData };
   return cmModules;
 }
 
@@ -438,6 +439,7 @@ function buildExtensions(cm) {
     cm.drawSelection(),
     cm.dropCursor(),
     cm.EditorState.allowMultipleSelections.of(true),
+    cm.indentUnit.of('  '),
     cm.indentOnInput(),
     cm.syntaxHighlighting(cm.defaultHighlightStyle, { fallback: true }),
     cm.bracketMatching(),
@@ -448,8 +450,8 @@ function buildExtensions(cm) {
       ...cm.searchKeymap,
       ...cm.historyKeymap,
     ]),
-    // Markdown
-    cm.markdown({ base: cm.markdownLanguage }),
+    // Markdown with code block language support
+    cm.markdown({ base: cm.markdownLanguage, codeLanguages: cm.languages }),
     butlerTheme(cm),
     headingStyles(cm),
     cm.keymap.of([

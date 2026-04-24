@@ -74,7 +74,7 @@ const $tabContextMenu = document.getElementById('tab-context-menu');
  *   'full'   — takes over the main area entirely
  */
 const plugins = {};
-const pluginOrder = { top: ['search', 'files', 'calendar'], bottom: ['sync', 'settings'] };
+const pluginOrder = { top: ['search', 'files', 'calendar', 'recipes', 'diary'], bottom: ['sync', 'settings'] };
 
 async function registerPlugin(name, modulePath) {
   try {
@@ -184,6 +184,8 @@ function defaultIcon(name) {
     files: '<svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M16 18H8"/><path d="M16 14H8"/><path d="M10 10H8"/></svg>',
     sync: '<svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9.51a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 14.49a9 9 0 0 1-14.85 3.36L1 14"/></svg>',
     settings: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    recipes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path d="M15 2.5c1 1.5 2 4 2 9.5M12 2v10M7 12a5 5 0 0 0 10 0"/></svg>',
+    diary: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M8 7h8M8 11h6"/></svg>',
   };
   return icons[name] || '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>';
 }
@@ -256,6 +258,24 @@ document.addEventListener('keydown', (e) => {
 
 // ─── Public Butler API (passed to plugins) ──────────────────
 
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'];
+
+function isImageFile(path) {
+  return IMAGE_EXTS.includes(path.split('.').pop().toLowerCase());
+}
+
+function renderImageViewer(path) {
+  $mainContent.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'image-viewer';
+  const img = document.createElement('img');
+  img.src = `/api/files/raw?path=${encodeURIComponent(path)}`;
+  img.alt = path.split('/').pop();
+  img.onerror = () => { wrap.innerHTML = `<div class="editor-loading" style="color:var(--red)">Failed to load image</div>`; };
+  wrap.appendChild(img);
+  $mainContent.appendChild(wrap);
+}
+
 const butler = {
   api: API,
   toast,
@@ -263,6 +283,24 @@ const butler = {
 
   openFile(path) {
     state.currentFile = path;
+
+    // Check if it's an image file
+    if (isImageFile(path)) {
+      // Deactivate full-type plugin if active
+      if (state.activePlugin && plugins[state.activePlugin]?.type === 'full') {
+        if (plugins[state.activePlugin]?.deactivate) plugins[state.activePlugin].deactivate();
+        state.activePlugin = null;
+        updateActiveIcon();
+      }
+      if (!state.openTabs.find(t => t.path === path)) {
+        state.openTabs.push({ path, name: path.split('/').pop() });
+      }
+      state.activeTab = path;
+      renderImageViewer(path);
+      renderTabBar();
+      return;
+    }
+
     if (!plugins.editor) { toast('Editor not loaded', 'error'); return; }
 
     // Deactivate full-type plugin if active
@@ -343,7 +381,11 @@ function switchTab(path) {
   }
 
   $mainContent.innerHTML = '';
-  if (plugins.editor) plugins.editor.openFile(path, $mainContent, butler);
+  if (isImageFile(path)) {
+    renderImageViewer(path);
+  } else if (plugins.editor) {
+    plugins.editor.openFile(path, $mainContent, butler);
+  }
   renderTabBar();
 }
 
@@ -470,6 +512,8 @@ window.addEventListener('beforeunload', (e) => {
     registerPlugin('search', '/js/plugins/search.js'),
     registerPlugin('files', '/js/plugins/files.js'),
     registerPlugin('calendar', '/js/plugins/calendar.js'),
+    registerPlugin('recipes', '/js/plugins/recipes.js'),
+    registerPlugin('diary', '/js/plugins/diary.js'),
     registerPlugin('sync', '/js/plugins/sync.js'),
     registerPlugin('settings', '/js/plugins/settings.js'),
     registerPlugin('editor', '/js/plugins/editor.js'),
