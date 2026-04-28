@@ -1,5 +1,6 @@
 {
     "workspace":  [
         {"location": "${HOME}/ws/butler/content"}
-    ]
+    ],
+    "update-links-when-moving-files": true
 }
