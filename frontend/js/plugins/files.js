@@ -89,6 +89,12 @@ function startRename(node) {
     try {
       await butlerRef.api.post('/api/files/rename', { old_path: node.path, new_path: newPath });
       butlerRef.toast('Renamed', 'success');
+      // If the basename (stem) changed, optionally update wiki-links to it.
+      const oldStem = oldName.replace(/\.[^.]+$/, '');
+      const newStem = newName.replace(/\.[^.]+$/, '');
+      if (oldStem !== newStem) {
+        await maybeUpdateLinks(node.path, newPath);
+      }
       loadTree();
       butlerRef.refreshFileTree?.();
     } catch (e) {
@@ -289,6 +295,92 @@ function esc(str) {
   const d = document.createElement('div');
   d.textContent = str;
   return d.innerHTML;
+}
+
+// ─── Link update prompt ─────────────────────────────────────
+
+async function maybeUpdateLinks(oldPath, newPath) {
+  // Read user.json to check the "always update" preference.
+  let userData = {};
+  try {
+    const res = await butlerRef.api.get('/api/settings/user');
+    userData = res?.data || {};
+  } catch { /* fall through to prompt */ }
+
+  if (userData['update-links-when-moving-files'] === true) {
+    await runUpdateLinks(oldPath, newPath);
+    return;
+  }
+
+  const decision = await showUpdateLinksDialog();
+  if (!decision) return;
+  if (decision.always) {
+    try {
+      await butlerRef.api.put('/api/settings/user', {
+        data: { ...userData, 'update-links-when-moving-files': true },
+      });
+    } catch { /* non-fatal */ }
+  }
+  if (decision.update) {
+    await runUpdateLinks(oldPath, newPath);
+  }
+}
+
+async function runUpdateLinks(oldPath, newPath) {
+  try {
+    const res = await butlerRef.api.post('/api/files/update-links', {
+      old_path: oldPath, new_path: newPath,
+    });
+    if (res?.updated > 0) {
+      butlerRef.toast(`Updated links in ${res.updated} file${res.updated !== 1 ? 's' : ''}`, 'success');
+    }
+  } catch (e) {
+    butlerRef.toast(`Link update failed: ${e.message}`, 'error');
+  }
+}
+
+function showUpdateLinksDialog() {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'cal-overlay';
+    overlay.innerHTML = `
+      <div class="cal-popup" style="max-width:420px;">
+        <h3 style="margin:0 0 12px;">Update links?</h3>
+        <p style="margin:0 0 16px;color:var(--text-2);font-size:13px;line-height:1.4;">
+          This file is renamed/moved. Update <code>[[…]]</code> references to it in other files?
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);margin-bottom:16px;">
+          <input type="checkbox" class="ulm-always"> Always update links when moving files
+        </label>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn btn-ghost ulm-no">No</button>
+          <button class="btn btn-primary ulm-yes">Yes, update</button>
+        </div>
+      </div>
+    `;
+    const cleanup = () => {
+      overlay.remove();
+      document.removeEventListener('keydown', escHandler);
+    };
+    const escHandler = (e) => {
+      if (e.key === 'Escape') { cleanup(); resolve(null); }
+    };
+    document.addEventListener('keydown', escHandler);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) { cleanup(); resolve(null); }
+    });
+    overlay.querySelector('.ulm-no').addEventListener('click', () => {
+      const always = overlay.querySelector('.ulm-always').checked;
+      cleanup();
+      resolve({ update: false, always });
+    });
+    overlay.querySelector('.ulm-yes').addEventListener('click', () => {
+      const always = overlay.querySelector('.ulm-always').checked;
+      cleanup();
+      resolve({ update: true, always });
+    });
+    document.body.appendChild(overlay);
+  });
 }
 
 // ─── Plugin Interface ───────────────────────────────────────

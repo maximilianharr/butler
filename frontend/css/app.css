@@ -7,7 +7,7 @@
 /* ----- Reset ------------------------------------------------ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { font-size: var(--fs-base); -webkit-font-smoothing: antialiased; }
-body { font-family: var(--ff-body); line-height: 1.6; color: var(--text-1); background: var(--bg-0); overflow: hidden; height: 100vh; }
+body { font-family: var(--ff-body); line-height: 1.0; color: var(--text-1); background: var(--bg-0); overflow: hidden; height: 100vh; }
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 input, textarea { font-family: inherit; color: inherit; background: none; border: none; outline: none; }
 a { color: var(--accent); text-decoration: none; }
@@ -16,8 +16,8 @@ a:hover { text-decoration: underline; }
 
 /* ----- Design Tokens (Dark — default) ----------------------- */
 :root, [data-theme="dark"] {
-  --ff-body: "Plus Jakarta Sans", system-ui, sans-serif;
-  --ff-heading: "Fraunces", "Georgia", serif;
+  --ff-body: "JetBrains Mono", ui-monospace, monospace;
+  --ff-heading: "JetBrains Mono", ui-monospace, monospace;
   --ff-mono: "JetBrains Mono", ui-monospace, monospace;
   --fs-base: 14px;
 
@@ -508,19 +508,17 @@ a:hover { text-decoration: underline; }
 }
 .sr-file .sr-line { font-size: 11px; color: var(--text-3); }
 
-.sr-context {
+.sr-match-line {
   font-size: 12px;
   font-family: var(--ff-mono);
-  color: var(--text-3);
+  color: var(--text-1);
   line-height: 1.3;
   white-space: pre-wrap;
   word-break: break-all;
   padding: 0;
   margin: 0;
 }
-
-.sr-context .sr-match-line { color: var(--text-1); }
-.sr-context mark {
+.sr-match-line mark {
   background: var(--accent-bg-strong);
   color: var(--accent);
   border-radius: 2px;
@@ -774,14 +772,19 @@ a:hover { text-decoration: underline; }
 }
 
 #editor-container .cm-editor .cm-scroller {
-  padding: 16px 48px;
+  padding: 16px 12px 16px 4px;
   font-family: var(--ff-body) !important;
   line-height: 1.75;
 }
 
 #editor-container .cm-editor .cm-content {
-  max-width: 720px;
-  margin: 0 auto;
+  max-width: none;
+  margin: 0;
+  width: 100%;
+}
+
+#editor-container .cm-editor .cm-gutters {
+  margin-right: 4px;
 }
 
 #editor-container .cm-editor .cm-gutters {
@@ -794,6 +797,14 @@ a:hover { text-decoration: underline; }
 #editor-container .cm-editor .cm-activeLineGutter,
 #editor-container .cm-editor .cm-activeLine {
   background: var(--accent-bg);
+}
+
+/* Active line should keep the same font and size as a normal line
+   (CodeMirror sometimes alters baseline metrics for cm-activeLine). */
+#editor-container .cm-editor .cm-line.cm-activeLine {
+  font-family: var(--ff-body);
+  font-size: var(--fs-base);
+  line-height: 1.75;
 }
 
 #editor-container .cm-editor .cm-selectionBackground {
@@ -1303,6 +1314,34 @@ a:hover { text-decoration: underline; }
 }
 .cal-event-chip.cal-span-mid.cal-span-week-break {
   border-radius: 0;
+}
+
+/* Lane container — keeps chips aligned across cells in the same week.
+   Negative horizontal margin negates the cell's horizontal padding so
+   multi-day chips can touch the cell edges and visually join across days. */
+.cal-lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  margin: 0 -6px;
+}
+.cal-lane-spacer {
+  height: 18px;
+  flex: 0 0 auto;
+}
+.cal-lanes .cal-event-chip {
+  height: 18px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 2px 6px;
+  border-radius: 0;
+}
+/* First and last lane chip in a single-day or true-start/end gets rounded ends */
+.cal-lanes .cal-event-chip:not(.cal-span) {
+  border-radius: 3px;
+  margin: 0 4px;
 }
 
 .cal-chip-title { flex: 1; overflow: hidden; text-overflow: ellipsis; }
@@ -2128,4 +2167,13 @@ a:hover { text-decoration: underline; }
   text-align: center;
   color: var(--text-3);
   font-size: 13px;
+}
+
+/* Highlight notes flagged as #referencenote with a brighter font color */
+.zk-tree .ft-item.zk-ref-note .ft-name {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.zk-tree .ft-item.zk-ref-note .ft-icon {
+  color: var(--accent);
 }

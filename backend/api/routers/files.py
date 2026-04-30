@@ -92,11 +92,16 @@ def _build_tree(directory: Path, ws: Path, git_map: dict[str, str], depth: int =
             # Extract first markdown title if .md
             if child.suffix.lower() == ".md":
                 try:
-                    for line in child.read_text(encoding="utf-8", errors="replace").splitlines():
+                    text = child.read_text(encoding="utf-8", errors="replace")
+                    for line in text.splitlines():
                         stripped = line.strip()
                         if stripped.startswith("# ") and not stripped.startswith("##"):
                             entry["title"] = stripped[2:].strip()
                             break
+                    # Detect #referencenote tag (whole word, case-insensitive).
+                    import re as _re
+                    if _re.search(r"(?i)(?<![A-Za-z0-9_])#referencenote\b", text):
+                        entry["referencenote"] = True
                 except Exception:
                     pass
         entries.append(entry)
@@ -213,6 +218,59 @@ async def rename_file(body: RenameBody):
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
     return {"ok": True, "old_path": body.old_path, "new_path": body.new_path}
+
+
+class UpdateLinksBody(BaseModel):
+    old_path: str
+    new_path: str
+
+
+@router.post("/update-links")
+async def update_links(body: UpdateLinksBody):
+    """Rewrite all `[[stem]]` / `[[stem|alias]]` references in workspace
+    markdown files when a file is renamed/moved.
+
+    Matches the old basename without extension (Obsidian-style wikilinks).
+    """
+    import re
+
+    ws = _workspace()
+    old_stem = Path(body.old_path).stem
+    new_stem = Path(body.new_path).stem
+
+    if not old_stem or old_stem == new_stem:
+        return {"ok": True, "updated": 0, "files": []}
+
+    # Match [[old_stem]] or [[old_stem|alias]] or [[old_stem#anchor]] (whole token)
+    pattern = re.compile(
+        r"(\[\[)" + re.escape(old_stem) + r"(?=[\]|#])"
+    )
+    updated_files: list[str] = []
+
+    async with _write_lock:
+        for md in ws.rglob("*.md"):
+            try:
+                rel = md.relative_to(ws).as_posix()
+            except ValueError:
+                continue
+            # Skip the moved file itself (it should already be at new path)
+            if rel == body.new_path:
+                continue
+            try:
+                content = md.read_text(encoding="utf-8")
+            except Exception:
+                continue
+            new_content, n = pattern.subn(lambda m: m.group(1) + new_stem, content)
+            if n > 0:
+                tmp = md.with_suffix(md.suffix + ".tmp")
+                try:
+                    tmp.write_text(new_content, encoding="utf-8")
+                    tmp.replace(md)
+                    updated_files.append(rel)
+                except Exception:
+                    tmp.unlink(missing_ok=True)
+
+    return {"ok": True, "updated": len(updated_files), "files": updated_files}
 
 
 class DuplicateBody(BaseModel):

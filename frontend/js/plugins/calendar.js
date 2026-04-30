@@ -289,29 +289,38 @@ function buildMonthView() {
 
   for (let r = 0; r < rows; r++) {
     const row = el('div', 'cal-month-row');
-    for (let c = 0; c < 7; c++) {
-      const idx = r * 7 + c;
-      const dayNum = idx - startOffset + 1;
 
+    // Compute the dates for this week (Mon-Sun)
+    const weekDates = [];
+    for (let c = 0; c < 7; c++) {
+      const dayNum = r * 7 + c - startOffset + 1;
+      const inMonth = dayNum >= 1 && dayNum <= lastDay.getDate();
+      weekDates.push(inMonth
+        ? `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
+        : null);
+    }
+
+    // Lane assignment: longest multi-day events first, then by start.
+    const lanes = computeWeekLanes(weekDates);
+    const MAX_LANES = 4;
+
+    for (let c = 0; c < 7; c++) {
+      const dateStr = weekDates[c];
       const cell = el('div', 'cal-day-cell');
 
-      if (dayNum < 1 || dayNum > lastDay.getDate()) {
+      if (!dateStr) {
         cell.classList.add('cal-day-empty');
         row.appendChild(cell);
         continue;
       }
 
+      const dayNum = r * 7 + c - startOffset + 1;
       const isToday = isThisMonth && dayNum === today.getDate();
       if (isToday) cell.classList.add('cal-day-today');
 
-      // Day number
       const num = el('div', 'cal-day-num');
       num.textContent = dayNum;
       cell.appendChild(num);
-
-      // Events for this day
-      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-      const dayEvents = getEventsForDate(dateStr).filter(e => !hiddenGroups.has(e.group));
 
       // Drop target for drag & drop
       cell.addEventListener('dragover', (e) => { e.preventDefault(); cell.classList.add('cal-drop-target'); });
@@ -322,79 +331,31 @@ function buildMonthView() {
         if (draggedEvent) handleEventDrop(draggedEvent, dateStr);
       });
 
-      for (const ev of dayEvents.slice(0, 3)) {
-        const chip = el('div', `cal-event-chip ${ev.type === 'task' ? 'cal-task-chip' : ''}`);
-        const color = gc(ev.group);
-        chip.style.background = color.bg;
-        chip.style.borderLeftColor = color.border;
-
-        // Multi-day spanning styles
-        const evStart = ev.start || ev.date;
-        const evEnd = ev.end;
-        if (evStart && evEnd) {
-          const sd = new Date(evStart);
-          const ed = new Date(evEnd);
-          const startLocal = `${sd.getFullYear()}-${String(sd.getMonth() + 1).padStart(2, '0')}-${String(sd.getDate()).padStart(2, '0')}`;
-          const endLocal = `${ed.getFullYear()}-${String(ed.getMonth() + 1).padStart(2, '0')}-${String(ed.getDate()).padStart(2, '0')}`;
-          if (startLocal !== endLocal) {
-            // Multi-day event
-            const isStart = dateStr === startLocal;
-            const isEnd = dateStr === endLocal;
-            const isWeekEnd = c === 6; // Sunday column
-            const isWeekStart = c === 0; // Monday column
-            chip.classList.add('cal-span');
-            if (isStart) chip.classList.add('cal-span-start');
-            else if (isEnd) chip.classList.add('cal-span-end');
-            else chip.classList.add('cal-span-mid');
-            if (isWeekEnd && !isEnd) chip.classList.add('cal-span-week-break');
-            if (isWeekStart && !isStart) chip.classList.add('cal-span-week-cont');
-          }
+      // Render lane slots so chips align across cells in the week.
+      const lanesEl = el('div', 'cal-lanes');
+      let visibleLanes = 0;
+      let extraCount = 0;
+      for (let lane = 0; lane < lanes.length; lane++) {
+        const ev = lanes[lane][c];
+        if (lane >= MAX_LANES) {
+          if (ev && ev.__startCol === c) extraCount++;
+          continue;
         }
-
-        // Drag & drop
-        chip.draggable = true;
-        chip.addEventListener('dragstart', (e) => {
-          draggedEvent = ev;
-          chip.classList.add('cal-dragging');
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        chip.addEventListener('dragend', () => {
-          draggedEvent = null;
-          chip.classList.remove('cal-dragging');
-        });
-
-        const title = el('span', 'cal-chip-title');
-        title.textContent = ev.title || '(untitled)';
-        chip.appendChild(title);
-
-        if (ev.type === 'task') {
-          const toggle = el('span', `cal-task-toggle ${ev.done ? 'done' : ''}`);
-          toggle.innerHTML = ev.done ? '✓' : '';
-          toggle.addEventListener('click', (e) => { e.stopPropagation(); toggleDone(ev); });
-          chip.appendChild(toggle);
+        if (ev) {
+          lanesEl.appendChild(buildChip(ev, dateStr, c, weekDates));
+        } else {
+          lanesEl.appendChild(el('div', 'cal-lane-spacer'));
         }
-
-        chip.addEventListener('click', (e) => { e.stopPropagation(); showEventPopup(ev); });
-
-        // Right-click on event chip
-        chip.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          showContextMenu(e.clientX, e.clientY, [
-            { label: 'Edit', action: () => showEventPopup(ev) },
-            { label: 'View', action: () => showViewPopup(ev) },
-            { label: 'Delete', action: () => { if (confirm(`Delete "${ev.title}"?`)) deleteEvent(ev.filename); } },
-          ]);
-        });
-
-        cell.appendChild(chip);
+        visibleLanes++;
       }
+      cell.appendChild(lanesEl);
 
-      if (dayEvents.length > 3) {
+      if (extraCount > 0) {
         const more = el('div', 'cal-more');
-        more.textContent = `+${dayEvents.length - 3} more`;
+        more.textContent = `+${extraCount} more`;
         more.addEventListener('click', (e) => {
           e.stopPropagation();
+          const dayEvents = getEventsForDate(dateStr).filter(ev => !hiddenGroups.has(ev.group));
           showDayPopup(dateStr, dayEvents);
         });
         cell.appendChild(more);
@@ -418,6 +379,158 @@ function buildMonthView() {
   }
 
   return grid;
+}
+
+// ─── Week lane assignment ───────────────────────────────────
+//
+// For a week (array of 7 ISO date strings, possibly null for out-of-month
+// cells), return an array of lanes. Each lane is an array of length 7
+// where lanes[laneIdx][colIdx] is either an event object (annotated with
+// __startCol / __endCol within the week) or null.
+function computeWeekLanes(weekDates) {
+  // Collect events that touch this week (deduped by filename).
+  const seen = new Set();
+  const evs = [];
+  for (let c = 0; c < 7; c++) {
+    const ds = weekDates[c];
+    if (!ds) continue;
+    for (const ev of getEventsForDate(ds)) {
+      if (hiddenGroups.has(ev.group)) continue;
+      const key = ev.filename || `${ev.title}|${ev.start || ev.date}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const range = eventWeekRange(ev, weekDates);
+      if (!range) continue;
+      evs.push({ ev, ...range });
+    }
+  }
+
+  // Sort: longest span first, then earlier start.
+  evs.sort((a, b) => {
+    const da = a.endCol - a.startCol;
+    const db = b.endCol - b.startCol;
+    if (db !== da) return db - da;
+    return a.startCol - b.startCol;
+  });
+
+  const lanes = [];
+  for (const item of evs) {
+    let placed = false;
+    for (const lane of lanes) {
+      let conflict = false;
+      for (let c = item.startCol; c <= item.endCol; c++) {
+        if (lane[c]) { conflict = true; break; }
+      }
+      if (!conflict) {
+        for (let c = item.startCol; c <= item.endCol; c++) {
+          lane[c] = annotateEv(item);
+        }
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      const lane = new Array(7).fill(null);
+      for (let c = item.startCol; c <= item.endCol; c++) {
+        lane[c] = annotateEv(item);
+      }
+      lanes.push(lane);
+    }
+  }
+  return lanes;
+}
+
+function annotateEv({ ev, startCol, endCol }) {
+  return Object.assign(Object.create(ev), { __startCol: startCol, __endCol: endCol, __ev: ev });
+}
+
+function eventWeekRange(ev, weekDates) {
+  const evStart = ev.start || ev.date;
+  if (!evStart) return null;
+  const sd = new Date(evStart);
+  const startLocal = isoDate(sd);
+  let endLocal = startLocal;
+  if (ev.end) {
+    const ed = new Date(ev.end);
+    endLocal = isoDate(ed);
+  }
+  let startCol = -1, endCol = -1;
+  for (let c = 0; c < 7; c++) {
+    const ds = weekDates[c];
+    if (!ds) continue;
+    if (ds >= startLocal && ds <= endLocal) {
+      if (startCol === -1) startCol = c;
+      endCol = c;
+    }
+  }
+  if (startCol === -1) return null;
+  return { startCol, endCol, startLocal, endLocal };
+}
+
+function buildChip(annotEv, dateStr, c, weekDates) {
+  const ev = annotEv.__ev || annotEv;
+  const chip = el('div', `cal-event-chip ${ev.type === 'task' ? 'cal-task-chip' : ''}`);
+  const color = gc(ev.group);
+  chip.style.background = color.bg;
+  chip.style.borderLeftColor = color.border;
+
+  // Multi-day spanning styles based on this week's range
+  const startCol = annotEv.__startCol;
+  const endCol = annotEv.__endCol;
+  const isStart = c === startCol;
+  const isEnd = c === endCol;
+  const evStart = ev.start || ev.date;
+  const evEnd = ev.end;
+  const sLocal = evStart ? isoDate(new Date(evStart)) : null;
+  const eLocal = evEnd ? isoDate(new Date(evEnd)) : sLocal;
+  const isTrueStart = sLocal === dateStr;
+  const isTrueEnd = eLocal === dateStr;
+  if (sLocal && eLocal && sLocal !== eLocal) {
+    chip.classList.add('cal-span');
+    if (isTrueStart) chip.classList.add('cal-span-start');
+    else if (isTrueEnd) chip.classList.add('cal-span-end');
+    else chip.classList.add('cal-span-mid');
+    if (isEnd && !isTrueEnd) chip.classList.add('cal-span-week-break');
+    if (isStart && !isTrueStart) chip.classList.add('cal-span-week-cont');
+  }
+
+  // Drag & drop
+  chip.draggable = true;
+  chip.addEventListener('dragstart', (e) => {
+    draggedEvent = ev;
+    chip.classList.add('cal-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  chip.addEventListener('dragend', () => {
+    draggedEvent = null;
+    chip.classList.remove('cal-dragging');
+  });
+
+  // Title is only rendered on the first cell of the span (within the week)
+  // so the connected chip reads as one event.
+  const title = el('span', 'cal-chip-title');
+  title.textContent = (c === startCol) ? (ev.title || '(untitled)') : '';
+  chip.appendChild(title);
+
+  if (ev.type === 'task' && c === startCol) {
+    const toggle = el('span', `cal-task-toggle ${ev.done ? 'done' : ''}`);
+    toggle.innerHTML = ev.done ? '✓' : '';
+    toggle.addEventListener('click', (e) => { e.stopPropagation(); toggleDone(ev); });
+    chip.appendChild(toggle);
+  }
+
+  chip.addEventListener('click', (e) => { e.stopPropagation(); showEventPopup(ev); });
+  chip.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showContextMenu(e.clientX, e.clientY, [
+      { label: 'Edit', action: () => showEventPopup(ev) },
+      { label: 'View', action: () => showViewPopup(ev) },
+      { label: 'Delete', action: () => { if (confirm(`Delete "${ev.title}"?`)) deleteEvent(ev.filename); } },
+    ]);
+  });
+
+  return chip;
 }
 
 // ─── Drag & Drop Handler ────────────────────────────────────

@@ -88,15 +88,28 @@ async function registerPlugin(name, modulePath) {
   }
 }
 
-function buildSidebar() {
+async function buildSidebar() {
   $abTop.innerHTML = '';
   $abBottom.innerHTML = '';
 
+  // Read enabled state from settings/plugins.json. Plugins not listed are
+  // assumed enabled (e.g. core: search, sync, settings, recipes). Plugins
+  // listed with `false` are hidden from the activity bar.
+  const disabled = new Set();
+  try {
+    const { data } = await API.get('/api/settings/plugins');
+    for (const entry of (data?.plugins || [])) {
+      for (const [name, enabled] of Object.entries(entry)) {
+        if (!enabled) disabled.add(name);
+      }
+    }
+  } catch { /* no plugins.json — show everything */ }
+
   for (const name of pluginOrder.top) {
-    if (plugins[name]) $abTop.appendChild(createIconButton(name, plugins[name]));
+    if (plugins[name] && !disabled.has(name)) $abTop.appendChild(createIconButton(name, plugins[name]));
   }
   for (const name of pluginOrder.bottom) {
-    if (plugins[name]) $abBottom.appendChild(createIconButton(name, plugins[name]));
+    if (plugins[name] && !disabled.has(name)) $abBottom.appendChild(createIconButton(name, plugins[name]));
   }
 }
 
@@ -591,8 +604,10 @@ window.addEventListener('beforeunload', (e) => {
     registerPlugin('editor', '/js/plugins/editor.js'),
   ]);
 
-  buildSidebar();
+  await buildSidebar();
 
-  // Open files panel by default
-  togglePlugin('files');
+  // Open files panel by default (only if it's still enabled)
+  if (plugins.files && document.querySelector('.ab-icon[data-plugin="files"]')) {
+    togglePlugin('files');
+  }
 })();

@@ -341,7 +341,7 @@ function pasteHandler(cm) {
       const data = event.clipboardData;
       if (!data) return false;
 
-      // Check for image blob in clipboard
+      // Image blobs: keep custom resize+upload behavior.
       for (const item of data.items) {
         if (item.type.startsWith('image/')) {
           event.preventDefault();
@@ -351,21 +351,29 @@ function pasteHandler(cm) {
         }
       }
 
-      // Check for pasted URL text
-      const text = data.getData('text/plain')?.trim();
-      if (text && /^https?:\/\/\S+$/.test(text)) {
-        event.preventDefault();
-        const imgExts = /\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?.*)?$/i;
-        const md = imgExts.test(text)
-          ? `![](${text})`
-          : `[${text}](${text})`;
-        view.dispatch(view.state.replaceSelection(md));
-        return true;
-      }
-
+      // Text: insert as plain text (Ctrl+V is plain paste; use Ctrl+K
+      // to paste as a markdown link).
       return false;
     }
   });
+}
+
+// Ctrl+K: paste clipboard text as a markdown link. If the clipboard
+// holds a URL it becomes [url](url); otherwise it becomes [text](text).
+function pasteAsLinkCommand(view) {
+  (async () => {
+    let text = '';
+    try { text = (await navigator.clipboard.readText()) || ''; } catch { /* permission denied */ }
+    text = text.trim();
+    if (!text) return;
+    const imgExts = /\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?.*)?$/i;
+    const isUrl = /^https?:\/\/\S+$/.test(text);
+    let md;
+    if (isUrl && imgExts.test(text)) md = `![](${text})`;
+    else md = `[${text}](${text})`;
+    view.dispatch(view.state.replaceSelection(md));
+  })();
+  return true;
 }
 
 async function handleImagePaste(view, blob, cm) {
@@ -585,6 +593,7 @@ function buildExtensions(cm) {
     headingStyles(cm),
     cm.keymap.of([
       { key: 'Mod-s', run() { saveCurrentFile(); return true; } },
+      { key: 'Mod-k', run: pasteAsLinkCommand },
       cm.indentWithTab,
     ]),
     cm.EditorView.lineWrapping,

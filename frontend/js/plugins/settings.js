@@ -38,6 +38,9 @@ async function loadCategories() {
       btn.addEventListener('click', () => selectCategory(cat));
       catEl.appendChild(btn);
     }
+    // Default to 'appearance' if available, else first category.
+    const defaultCat = categories.includes('appearance') ? 'appearance' : categories[0];
+    if (defaultCat) selectCategory(defaultCat);
   } catch (e) {
     catEl.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px;">Error: ${e.message}</div>`;
   }

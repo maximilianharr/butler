@@ -73,19 +73,13 @@ async function doSearch(query) {
         item.className = 'sr-item';
 
         const highlighted = highlightMatch(match.text, query);
-        const ctxBefore = match.context_before != null ? `<div>${esc(match.context_before)}</div>` : '';
-        const ctxAfter = match.context_after != null ? `<div>${esc(match.context_after)}</div>` : '';
 
         item.innerHTML = `
           <div class="sr-file">
             <span>${esc(file.split('/').pop())}</span>
             <span class="sr-line">:${match.line}</span>
           </div>
-          <div class="sr-context">
-            ${ctxBefore}
-            <div class="sr-match-line">${highlighted}</div>
-            ${ctxAfter}
-          </div>
+          <div class="sr-match-line">${highlighted}</div>
         `;
 
         item.addEventListener('click', () => {

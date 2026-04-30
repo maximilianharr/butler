@@ -99,6 +99,7 @@ function renderTree(nodes, depth) {
       frag.appendChild(childWrap);
     } else {
       item.dataset.path = node.path;
+      if (node.referencenote) item.classList.add('zk-ref-note');
       item.innerHTML = `
         <span class="ft-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
