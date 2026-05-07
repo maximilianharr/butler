@@ -148,11 +148,27 @@ async function deleteEvent(filename) {
   }
 }
 
+function toEventPayload(ev, overrides = {}) {
+  return {
+    title: ev.title || '',
+    type: ev.type || 'event',
+    start: ev.start || null,
+    end: ev.end || null,
+    date: ev.date || null,
+    duration: ev.duration || null,
+    group: ev.group || 'blue',
+    location: ev.location || null,
+    repeat: ev.repeat || null,
+    done: ev.done ?? null,
+    alert: ev.alert || null,
+    participants: ev.participants || null,
+    body: ev.body || '',
+    ...overrides,
+  };
+}
+
 async function toggleDone(ev) {
-  const data = { ...ev, done: !ev.done };
-  delete data.filename;
-  delete data.body;
-  data.body = ev.body || '';
+  const data = toEventPayload(ev, { done: !ev.done });
   await saveEvent(data, ev.filename);
 }
 
@@ -545,26 +561,22 @@ async function handleEventDrop(ev, newDateStr) {
   const deltaMs = newDate.getTime() - new Date(oldDate.getFullYear(), oldDate.getMonth(), oldDate.getDate(),
     oldDate.getHours(), oldDate.getMinutes(), oldDate.getSeconds()).getTime();
 
-  const data = { ...ev };
-  delete data.filename;
-  delete data.body;
-  data.body = ev.body || '';
+  const overrides = {};
 
-  // Shift start
-  if (data.start) {
-    const d = new Date(new Date(data.start).getTime() + deltaMs);
-    data.start = d.toISOString();
+  if (ev.start) {
+    const d = new Date(new Date(ev.start).getTime() + deltaMs);
+    overrides.start = d.toISOString();
   }
-  if (data.date) {
-    const d = new Date(new Date(data.date).getTime() + deltaMs);
-    data.date = d.toISOString();
+  if (ev.date) {
+    const d = new Date(new Date(ev.date).getTime() + deltaMs);
+    overrides.date = d.toISOString();
   }
-  // Shift end by same delta
-  if (data.end) {
-    const d = new Date(new Date(data.end).getTime() + deltaMs);
-    data.end = d.toISOString();
+  if (ev.end) {
+    const d = new Date(new Date(ev.end).getTime() + deltaMs);
+    overrides.end = d.toISOString();
   }
 
+  const data = toEventPayload(ev, overrides);
   await saveEvent(data, ev.filename);
 }
 

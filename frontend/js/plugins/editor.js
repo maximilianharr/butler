@@ -358,19 +358,46 @@ function pasteHandler(cm) {
   });
 }
 
-// Ctrl+K: paste clipboard text as a markdown link. If the clipboard
-// holds a URL it becomes [url](url); otherwise it becomes [text](text).
+// Ctrl+K: insert a markdown link. If clipboard is accessible (permission already
+// granted, no popup), use clipboard text. Otherwise use selected text.
 function pasteAsLinkCommand(view) {
+  const { from, to } = view.state.selection.main;
+  const selection = view.state.sliceDoc(from, to);
+
   (async () => {
-    let text = '';
-    try { text = (await navigator.clipboard.readText()) || ''; } catch { /* permission denied */ }
-    text = text.trim();
-    if (!text) return;
+    let clipText = '';
+    // Only read clipboard if permission is already granted (avoids browser popup)
+    try {
+      const perm = await navigator.permissions.query({ name: 'clipboard-read' });
+      if (perm.state === 'granted') {
+        clipText = (await navigator.clipboard.readText()) || '';
+      }
+    } catch {
+      // Permissions API unavailable — try clipboard directly (works in Chrome user gesture)
+      try { clipText = (await navigator.clipboard.readText()) || ''; } catch { /* skip */ }
+    }
+    clipText = clipText.trim();
+
+    const isUrl = (s) => /^https?:\/\/\S+$/.test(s);
     const imgExts = /\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?.*)?$/i;
-    const isUrl = /^https?:\/\/\S+$/.test(text);
+
     let md;
-    if (isUrl && imgExts.test(text)) md = `![](${text})`;
-    else md = `[${text}](${text})`;
+    if (selection && isUrl(clipText)) {
+      // Selected text + URL in clipboard → [text](url)
+      md = imgExts.test(clipText) ? `![${selection}](${clipText})` : `[${selection}](${clipText})`;
+    } else if (isUrl(selection)) {
+      // Selected text is a URL → [url](url)
+      md = imgExts.test(selection) ? `![](${selection})` : `[${selection}](${selection})`;
+    } else if (clipText) {
+      // Clipboard has text, use it
+      md = (isUrl(clipText) && imgExts.test(clipText)) ? `![](${clipText})` : `[${clipText}](${clipText})`;
+    } else if (selection) {
+      // Only selected text, no clipboard → wrap as link text
+      md = `[${selection}]()`;
+    } else {
+      // Nothing available → insert link template
+      md = `[]()`;
+    }
     view.dispatch(view.state.replaceSelection(md));
   })();
   return true;

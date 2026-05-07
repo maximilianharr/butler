@@ -7,25 +7,35 @@
 
 // ─── API Helper ─────────────────────────────────────────────
 
+function extractErrorMessage(json, statusText) {
+  const detail = json?.detail;
+  if (!detail) return statusText;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map(d => d.msg || JSON.stringify(d)).join('; ');
+  }
+  return JSON.stringify(detail);
+}
+
 const API = {
   async get(url) {
     const res = await fetch(url);
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
   async post(url, body) {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
   async put(url, body) {
     const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
   async del(url) {
     const res = await fetch(url, { method: 'DELETE' });
-    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
 };
@@ -360,6 +370,7 @@ const butler = {
     $mainContent.innerHTML = '';
     plugins.editor.openFile(path, $mainContent, butler);
     renderTabBar();
+    syncSidePanelHighlight(path);
   },
 
   onTabDirtyChange(path, _dirty) {
@@ -452,6 +463,15 @@ function renderTabBar() {
   }
 }
 
+function syncSidePanelHighlight(path) {
+  if (!state.sidePanelVisible || !path) return;
+  if (state.activePlugin === 'files' && plugins.files?.revealFile) {
+    plugins.files.revealFile(path);
+  } else if (state.activePlugin === 'zettelkasten' && plugins.zettelkasten?.activate) {
+    plugins.zettelkasten.activate();
+  }
+}
+
 function switchTab(path) {
   if (state.activeTab === path) return;
   state.activeTab = path;
@@ -471,6 +491,7 @@ function switchTab(path) {
     plugins.editor.openFile(path, $mainContent, butler);
   }
   renderTabBar();
+  syncSidePanelHighlight(path);
 }
 
 function closeTabByPath(path) {

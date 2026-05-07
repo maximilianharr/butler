@@ -256,6 +256,15 @@ async function loadTree() {
 async function revealFile(filePath) {
   if (!$container || !butlerRef) return;
 
+  // If the file is already visible and highlighted, just ensure scroll
+  const existing = $container.querySelector(`.ft-item[data-path="${CSS.escape(filePath)}"]`);
+  if (existing) {
+    $container.querySelectorAll('.ft-item.active').forEach(el => el.classList.remove('active'));
+    existing.classList.add('active');
+    existing.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    return;
+  }
+
   // Expand all ancestor directories
   const parts = filePath.split('/');
   for (let i = 1; i < parts.length; i++) {
@@ -394,10 +403,14 @@ export default {
   init(container, butler) {
     $container = container;
     butlerRef = butler;
-    loadTree();
+    // If there's an active tab, activate() will call revealFile (which loads the tree)
+    if (!butler?.state?.activeTab) loadTree();
   },
 
-  activate() {},
+  activate() {
+    const activeTab = butlerRef?.state?.activeTab;
+    if (activeTab) revealFile(activeTab);
+  },
   deactivate() {},
 
   refresh() { loadTree(); },

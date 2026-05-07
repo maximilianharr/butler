@@ -11,6 +11,7 @@ let $container = null;
 let butlerRef = null;
 let expandedPaths = new Set();
 let allFiles = [];
+let treeReady = null;
 
 const ZK_ROOT = 'zettelkasten';
 
@@ -193,12 +194,33 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// ─── Reveal active file ─────────────────────────────────────
+
+function highlightActiveFile() {
+  if (!$container || !butlerRef) return;
+  const activeTab = butlerRef.state?.activeTab;
+  if (!activeTab) return;
+
+  // Only highlight if it's within the zettelkasten folder
+  if (!activeTab.startsWith(ZK_ROOT + '/') && activeTab !== ZK_ROOT) return;
+
+  // Clear existing highlights
+  $container.querySelectorAll('.ft-item.active').forEach(el => el.classList.remove('active'));
+
+  const target = $container.querySelector(`.ft-item[data-path="${CSS.escape(activeTab)}"]`);
+  if (target) {
+    target.classList.add('active');
+    target.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
 // ─── Plugin Interface ───────────────────────────────────────
 
 async function init(container, butler) {
   $container = container;
   butlerRef = butler;
-  await loadTree();
+  treeReady = loadTree();
+  await treeReady;
 }
 
 export default {
@@ -213,7 +235,11 @@ export default {
     <path d="M16 8v12"/>
   </svg>`,
   init,
-  activate() {},
+  activate() {
+    // Wait for tree to be ready before highlighting
+    if (treeReady) treeReady.then(() => highlightActiveFile());
+    else highlightActiveFile();
+  },
   deactivate() {},
   getFiles,
 };
