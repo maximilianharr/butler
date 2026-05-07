@@ -1,9 +1,14 @@
-1. Make the huge space between div.cm-gutter.cm-gutters-before and div.cm-content.cm-lineWrapping in the div.cm-scroller smaller and extend the line scroller to full width
-2. When a zettel in the zettelkasten plugin contains #referencenote then highlight zettel but using a brighter font color in the zettelkasten file viewer.
-3. In the markdown editor paste a link as plain text via ```ctrl v``` and as a link via ```ctrl k```
-4. Make calendar multi-day events and tasks rectangles connected for each line (e.g. week in month view) and always put longest multi-day event on topmost line. This way the user knows it is one event and not multiple single ones
-5. When opening the settings select 'appearance as default view'
-6. Do not show plugins in leftmost pane if toggle in plugin section of settings is disabled
-7. When the user moves files which are linked in other files the user is prompted if all links ```[[...]]``` to this file shall be updated to the new file location. There is a checkbox to click using ```always update links when moving files``` to skip the popup and update the links. It can be set back to false user.json "update-links-when-moving-files" item.
-8. In the frontmatter viewer the cm-line.cm-activeLine has different font and font size than div.cm-line. Use the default font and font-size of div.cm-line for cm-line.cm-activeLine.
-9. In the search in div.sr-iitem the div.sr-context is to big and div.sr-match-line only takes a small portion of the size. Just show the div.sr-file and the div.sr-match-line and not the context as it increases the search item to much.
+1. When updating the Location in user.json the new location is not loaded
+2. In settings user.json the user shall have the option to add a workspace location. 
+3. When searching with `ctrl f` in file then put search pane to top instead of bottom of markdown script
+4. When calendar toggle is deactivated in settings plugins.json then calendar icon should not be visible in left pane
+5. In settings shortkeys.json the user shall have an 'update' button to enter a new shortkey.
+6. When the user selects a file in the tabs then it selects the file in the files view and opens the folder structure. This works fine. However in the zettelkasten view it does not open unexpanded folders to select the file in the files viewer. Implement this.
+7. When a link in the zettelkasten has been created via ```[[marcus-aurelius.md]]``` open the respective markdown in the tab if the user clicks on it.
+8. Make all markdown files link and searchable via ```[[...]]``` for all plugin folders.
+9. 
+
+implement other features
+
+
+User task
