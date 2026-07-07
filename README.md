@@ -7,9 +7,10 @@ Your life in markdown.
 mkdir -p ${HOME}/ws
 cd ${HOME}/ws
 git clone https://github.com/maximilianharr/butler.git
+python3 -m venv .venv
 ```
 
 ## Run
 ```bash
-./run.sh
+source .venv/bin/activate && ./run.sh
 ```
