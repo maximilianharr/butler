@@ -1,5 +1,5 @@
 {
     "workspace":  [
-        {"location": "${HOME}/ws/butler/content"}
+        {"location": "${HOME}/ws/butler-content"}
     ]
 }
