@@ -1,0 +1,10 @@
+{
+    "name": "butler",
+    "private": true,
+    "devDependencies": {
+        "@codemirror/lang-markdown": "^6",
+        "@codemirror/language-data": "^6",
+        "codemirror": "^6",
+        "esbuild": "^0.25"
+    }
+}

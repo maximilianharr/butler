@@ -1,20 +1,18 @@
-/* Color Theme Swatches in Hex */
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-1-hex { color: #77BDD9; }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-2-hex { color: #A7CBD9; }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-3-hex { color: #557370; }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-4-hex { color: #F2B279; }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-5-hex { color: #F29E6D; }
-
-/* Color Theme Swatches in RGBA */
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-1-rgba { color: rgba(119, 189, 216, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-2-rgba { color: rgba(166, 202, 216, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-3-rgba { color: rgba(84, 114, 111, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-4-rgba { color: rgba(242, 177, 121, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-5-rgba { color: rgba(242, 157, 109, 1); }
-
-/* Color Theme Swatches in HSLA */
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-1-hsla { color: hsla(196, 56, 65, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-2-hsla { color: hsla(196, 39, 75, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-3-hsla { color: hsla(174, 14, 39, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-4-hsla { color: hsla(28, 82, 71, 1); }
-.White-bush-roses-on-a-background-of-blue-sky-in-the-sunlight.-Beautiful-spring-or-summer-floral-background.-5-hsla { color: hsla(22, 83, 68, 1); }
+/* Bright theme — palette: #77BDD9 #A7CBD9 #557370 #F2B279 #F29E6D */
+:root[data-theme="bright"] {
+    --bg: #fbfcfd;
+    --bg-pane: #f1f5f8;
+    --bg-raised: #ffffff;
+    --bg-hover: #e2ecf2;
+    --fg: #26333a;
+    --fg-muted: #557370;
+    --border: #d3e0e8;
+    --accent: #77BDD9;
+    --accent-strong: #4a9dc2;
+    --accent-soft: #A7CBD9;
+    --link: #2b7ea6;
+    --highlight: #e07a3f;   /* search-hit orange */
+    --status-new: #2e9e4f;
+    --status-modified: #e07a3f;
+    --shadow: rgba(38, 51, 58, 0.2);
+}

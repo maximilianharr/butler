@@ -1,2 +1,4 @@
-.agents/
-.claude/
+content/
+.venv/
+node_modules/
+__pycache__/
