@@ -37,6 +37,8 @@ ufw default deny incoming
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
+# containers need to reach aardvark-dns on the bridge; deny-incoming blocks it otherwise
+ufw allow in on podman1 comment "podman internal (aardvark-dns etc.)"
 ufw --force enable
 
 echo "done. check: systemctl status butler-app butler-caddy"
