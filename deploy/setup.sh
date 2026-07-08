@@ -39,6 +39,8 @@ ufw allow 80/tcp
 ufw allow 443/tcp
 # containers need to reach aardvark-dns on the bridge; deny-incoming blocks it otherwise
 ufw allow in on podman1 comment "podman internal (aardvark-dns etc.)"
+# published container ports (80/443) arrive via the FORWARD chain, which ufw drops by default
+ufw route allow out on podman1 comment "published container ports"
 ufw --force enable
 
 echo "done. check: systemctl status butler-app butler-caddy"
