@@ -317,6 +317,9 @@ const butler = {
     const isDouble = opts.doubleClick === true;
     state.currentFile = path;
 
+    // Mobile: the side panel is an overlay; close it so the opened file is visible
+    if (window.matchMedia('(max-width: 767px)').matches) closeSidePanel();
+
     // Check if it's an image file
     if (isImageFile(path)) {
       // Deactivate full-type plugin if active

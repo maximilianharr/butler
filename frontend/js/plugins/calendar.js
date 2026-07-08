@@ -377,8 +377,17 @@ function buildMonthView() {
         cell.appendChild(more);
       }
 
-      // Left-click on empty cell → new event
-      cell.addEventListener('click', () => showEventPopup(null, dateStr));
+      // Left-click on empty cell → new event; on mobile → jump to day view
+      cell.addEventListener('click', () => {
+        if (window.matchMedia('(max-width: 767px)').matches) {
+          const [y, m, d] = dateStr.split('-').map(Number);
+          currentDate = new Date(y, m - 1, d);
+          currentView = 'day';
+          refresh();
+        } else {
+          showEventPopup(null, dateStr);
+        }
+      });
 
       // Right-click on day cell → context menu
       cell.addEventListener('contextmenu', (e) => {
@@ -489,6 +498,7 @@ function buildChip(annotEv, dateStr, c, weekDates) {
   const color = gc(ev.group);
   chip.style.background = color.bg;
   chip.style.borderLeftColor = color.border;
+  chip.style.setProperty('--chip-color', color.border); // mobile CSS renders chips as dots of this color
 
   // Multi-day spanning styles based on this week's range
   const startCol = annotEv.__startCol;

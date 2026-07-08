@@ -2177,3 +2177,72 @@ a:hover { text-decoration: underline; }
 .zk-tree .ft-item.zk-ref-note .ft-icon {
   color: var(--accent);
 }
+
+/* ----- Mobile (< 768px) -------------------------------------- */
+@media (max-width: 767px) {
+  /* !important: desktop drag-resize writes an inline grid-template-columns on #app */
+  #app,
+  #app:has(#side-panel:not(.collapsed)) {
+    grid-template-columns: 48px 1fr !important;
+  }
+
+  /* Side panel becomes an overlay drawer instead of a grid column */
+  #side-panel:not(.collapsed) {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 48px;
+    right: 0;
+    width: auto;
+    z-index: 100;
+    box-shadow: var(--shadow);
+    border-right: none;
+  }
+  #resize-handle { display: none !important; }
+
+  #main-area { grid-column: 2; min-width: 0; }
+
+  /* Touch targets */
+  .tab { min-height: 40px; }
+  .ft-item { padding-top: 8px; padding-bottom: 8px; }
+  .editor-toolbar-btn { width: 36px; height: 36px; }
+  #sp-close { width: 36px; height: 36px; }
+  .ab-icon[data-tooltip]:hover::after { display: none; } /* no hover tooltips on touch */
+
+  #welcome .welcome-shortcuts { display: none; } /* keyboard hints */
+
+  /* Settings: stack categories above content */
+  .settings-layout { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: auto; min-height: 100%; }
+  .settings-categories { border-right: none; border-bottom: 1px solid var(--border-subtle); padding: 8px 0; }
+
+  /* Calendar toolbar wraps instead of overflowing */
+  .cal-toolbar { flex-wrap: wrap; }
+
+  /* Calendar month grid: chips become color dots, tap day -> day view */
+  .cal-month-row { min-height: 56px; }
+  .cal-day-cell { padding: 4px 2px; }
+  .cal-lanes {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin: 0;
+    padding: 0 2px;
+    align-content: flex-start;
+  }
+  .cal-lanes .cal-event-chip,
+  .cal-lanes .cal-event-chip:not(.cal-span) {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    padding: 0;
+    margin: 0;
+    border-radius: 50%;
+    border-left: none;
+    font-size: 0;
+    background: var(--chip-color, var(--accent)) !important; /* beats the inline translucent bg */
+    pointer-events: none; /* 7px dots aren't tap targets; the cell tap opens day view */
+  }
+  .cal-lanes .cal-event-chip > * { display: none; } /* title text, task toggles */
+  .cal-lanes .cal-lane-spacer { display: none; }
+  .cal-more { font-size: 9px; }
+}
