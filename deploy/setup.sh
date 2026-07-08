@@ -41,6 +41,8 @@ ufw allow 443/tcp
 ufw allow in on podman1 comment "podman internal (aardvark-dns etc.)"
 # published container ports (80/443) arrive via the FORWARD chain, which ufw drops by default
 ufw route allow out on podman1 comment "published container ports"
+# containers also need outbound internet (ACME cert issuance) through the same chain
+ufw route allow in on podman1 comment "container outbound"
 ufw --force enable
 
 echo "done. check: systemctl status butler-app butler-caddy"

@@ -13,4 +13,4 @@ ssh "$HOST" "set -e
   systemctl daemon-reload
   systemctl restart butler-app
 "
-echo "deployed. https://butler.bit8.eu"
+echo "deployed. https://bit8.eu/butler/"
