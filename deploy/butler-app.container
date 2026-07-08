@@ -1,0 +1,15 @@
+[Unit]
+Description=Butler app (FastAPI/uvicorn)
+
+[Container]
+Image=localhost/butler-app:latest
+ContainerName=butler-app
+Network=butler.network
+Volume=/opt/butler-data/settings:/app/settings
+Volume=/opt/butler-data/content:/data/content
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

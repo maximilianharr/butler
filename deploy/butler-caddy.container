@@ -1,0 +1,18 @@
+[Unit]
+Description=Butler Caddy reverse proxy (TLS + basic auth)
+
+[Container]
+Image=docker.io/library/caddy:2
+ContainerName=butler-caddy
+Network=butler.network
+PublishPort=80:80
+PublishPort=443:443
+Volume=/opt/butler-data/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+Volume=/opt/butler-data/caddy/data:/data
+Volume=/opt/butler-data/caddy/config:/config
+
+[Service]
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

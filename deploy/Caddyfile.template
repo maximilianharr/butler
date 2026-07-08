@@ -1,0 +1,7 @@
+butler.bit8.eu {
+	basic_auth {
+		__USER__ __HASH__
+	}
+	reverse_proxy butler-app:8000
+	encode gzip
+}
