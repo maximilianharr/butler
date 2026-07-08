@@ -2200,7 +2200,10 @@ a:hover { text-decoration: underline; }
   }
   #resize-handle { display: none !important; }
 
-  #main-area { grid-column: 2; min-width: 0; }
+  /* Pin to row 1: the collapsed (width:0) side panel still sits in column 2,
+     so without an explicit row, main-area auto-flows into row 2 */
+  #side-panel.collapsed { grid-row: 1; }
+  #main-area { grid-row: 1; grid-column: 2; min-width: 0; }
 
   /* Touch targets */
   .tab { min-height: 40px; }
