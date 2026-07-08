@@ -47,7 +47,7 @@ function resolveImageUrl(src) {
   let resolved = src;
   if (src.startsWith('./')) resolved = dir + src.substring(2);
   else if (!src.startsWith('/')) resolved = dir + src;
-  return `/api/files/raw?path=${encodeURIComponent(resolved)}`;
+  return `api/files/raw?path=${encodeURIComponent(resolved)}`;
 }
 
 // ─── Image Preview Decoration (StateField — block-safe) ─────
@@ -429,7 +429,7 @@ async function handleImagePaste(view, blob, cm) {
   formData.append('file', resized.blob, `paste.${ext}`);
 
   try {
-    const res = await fetch(`/api/files/upload-image?plugin=${encodeURIComponent(dir)}`, {
+    const res = await fetch(`api/files/upload-image?plugin=${encodeURIComponent(dir)}`, {
       method: 'POST',
       body: formData,
     });
@@ -770,7 +770,7 @@ function triggerFileUpload(imageOnly) {
     formData.append('file', file, file.name);
 
     try {
-      const res = await fetch(`/api/files/upload-image?plugin=${encodeURIComponent(dir)}`, {
+      const res = await fetch(`api/files/upload-image?plugin=${encodeURIComponent(dir)}`, {
         method: 'POST',
         body: formData,
       });

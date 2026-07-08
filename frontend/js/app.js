@@ -17,24 +17,28 @@ function extractErrorMessage(json, statusText) {
   return JSON.stringify(detail);
 }
 
+// Strip the leading slash so URLs resolve against the document base —
+// works both at the domain root (dev) and behind a path prefix like /butler/.
+const rel = (url) => url.replace(/^\//, '');
+
 const API = {
   async get(url) {
-    const res = await fetch(url);
+    const res = await fetch(rel(url));
     if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
   async post(url, body) {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(rel(url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
   async put(url, body) {
-    const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(rel(url), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
   async del(url) {
-    const res = await fetch(url, { method: 'DELETE' });
+    const res = await fetch(rel(url), { method: 'DELETE' });
     if (!res.ok) throw new Error(extractErrorMessage(await res.json().catch(() => ({})), res.statusText));
     return res.json();
   },
@@ -295,7 +299,7 @@ function renderImageViewer(path) {
   const wrap = document.createElement('div');
   wrap.className = 'image-viewer';
   const img = document.createElement('img');
-  img.src = `/api/files/raw?path=${encodeURIComponent(path)}`;
+  img.src = `api/files/raw?path=${encodeURIComponent(path)}`;
   img.alt = path.split('/').pop();
   img.onerror = () => { wrap.innerHTML = `<div class="editor-loading" style="color:var(--red)">Failed to load image</div>`; };
   wrap.appendChild(img);
@@ -614,15 +618,15 @@ window.addEventListener('beforeunload', (e) => {
 
   // Register core plugins
   await Promise.all([
-    registerPlugin('search', '/js/plugins/search.js'),
-    registerPlugin('files', '/js/plugins/files.js'),
-    registerPlugin('zettelkasten', '/js/plugins/zettelkasten.js'),
-    registerPlugin('calendar', '/js/plugins/calendar.js'),
-    registerPlugin('recipes', '/js/plugins/recipes.js'),
-    registerPlugin('diary', '/js/plugins/diary.js'),
-    registerPlugin('sync', '/js/plugins/sync.js'),
-    registerPlugin('settings', '/js/plugins/settings.js'),
-    registerPlugin('editor', '/js/plugins/editor.js'),
+    registerPlugin('search', './plugins/search.js'),
+    registerPlugin('files', './plugins/files.js'),
+    registerPlugin('zettelkasten', './plugins/zettelkasten.js'),
+    registerPlugin('calendar', './plugins/calendar.js'),
+    registerPlugin('recipes', './plugins/recipes.js'),
+    registerPlugin('diary', './plugins/diary.js'),
+    registerPlugin('sync', './plugins/sync.js'),
+    registerPlugin('settings', './plugins/settings.js'),
+    registerPlugin('editor', './plugins/editor.js'),
   ]);
 
   await buildSidebar();

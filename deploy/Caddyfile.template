@@ -1,7 +1,12 @@
-butler.bit8.eu {
-	basic_auth {
-		__USER__ __HASH__
+bit8.eu {
+	redir /butler /butler/ permanent
+
+	handle_path /butler/* {
+		basic_auth {
+			__USER__ __HASH__
+		}
+		reverse_proxy butler-app:8000
 	}
-	reverse_proxy butler-app:8000
-	encode gzip
+
+	# root of bit8.eu stays free for future sites
 }
