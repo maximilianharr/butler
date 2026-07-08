@@ -19,3 +19,4 @@ Thumbs.db
 # Content workspace (user data, not committed)
 content/
 .env.secrets
+.claude/

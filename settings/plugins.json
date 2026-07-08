@@ -1,10 +1,10 @@
 {
     "plugins": [
         {
-            "calendar": false
+            "calendar": true
         },
         {
-            "diary": false
+            "diary": true
         },
         {
             "dossier": true
